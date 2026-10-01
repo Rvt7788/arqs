@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Penumbra</title>
+<meta name="description" content="Leitor de livros para ler com pouca luz.">
+<meta name="theme-color" content="#141414">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-64.png" sizes="64x64" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Penumbra">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<style>
+html { color-scheme: light; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Layout: tela cheia com página paginada em colunas; um toque no centro abre as barras, que flutuam sobre o texto. */
+:root {
+  --bg: #f6f5f1;
+  --fg: #2a2825;
+  --muted: #77736b;
+  --bar: #fbfaf7;
+  --line: #dedad1;
+  --accent: #2c6a94;
+  --on-accent: #ffffff;
+  --scrim: rgba(20, 18, 14, 0.32);
+  --veil: #000000;
+  --amber: #ff9a3c;
+  --serif: 'Literata', Georgia, 'Times New Roman', serif;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141414; --fg: #b9b4aa; --muted: #7d786f; --bar: #1c1c1b; --line: #2d2c2a;
+    --accent: #8db8d8; --on-accent: #101214; --scrim: rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141414; --fg: #b9b4aa; --muted: #7d786f; --bar: #1c1c1b; --line: #2d2c2a;
+  --accent: #8db8d8; --on-accent: #101214; --scrim: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+/* Tema escolhido pelo leitor (vence o tema do sistema) */
+:root[data-rt="paper"] {
+  --bg: #f6f5f1; --fg: #2a2825; --muted: #77736b; --bar: #fbfaf7; --line: #dedad1;
+  --accent: #2c6a94; --on-accent: #ffffff; --scrim: rgba(20, 18, 14, 0.32);
+  color-scheme: light;
+}
+:root[data-rt="sepia"] {
+  --bg: #efe4cc; --fg: #3b2f22; --muted: #85755d; --bar: #f5ecd9; --line: #dbcdb0;
+  --accent: #8a5a2b; --on-accent: #ffffff; --scrim: rgba(40, 28, 10, 0.34);
+  color-scheme: light;
+}
+:root[data-rt="dark"] {
+  --bg: #141414; --fg: #b9b4aa; --muted: #7d786f; --bar: #1c1c1b; --line: #2d2c2a;
+  --accent: #8db8d8; --on-accent: #101214; --scrim: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 15px;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+#app { --gutter: 28px; position: relative; height: 100%; display: flex; flex-direction: column; }
+
+/* ---------- início ---------- */
+#home { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px 16px; overflow: auto; }
+#app[data-state="reading"] #home { display: none; }
+#app[data-state="home"] #stage, #app[data-state="home"] #foot { display: none; }
+.home-in { width: 100%; max-width: 26rem; display: grid; gap: 18px; }
+.home-in h1 { margin: 0; font-family: var(--serif); font-weight: 600; font-size: 3rem; letter-spacing: -0.01em; line-height: 1; }
+.home-in .tag { margin: 0; color: var(--muted); line-height: 1.5; max-width: 30ch; }
+.home-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.formats { margin: 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sources { margin: 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.sources a { color: var(--accent); }
+body.drag .home-in { outline: 2px dashed var(--accent); outline-offset: 14px; }
+.btn {
+  min-height: 48px; padding: 0 20px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+
+/* ---------- leitura ---------- */
+#stage { position: relative; flex: 1; min-height: 0; padding: 20px var(--gutter) 8px; touch-action: pan-y; cursor: default; }
+#page {
+  margin: 0 auto; overflow: hidden;
+  font-family: var(--serif); line-height: 1.62; color: var(--fg);
+  text-align: justify; hyphens: auto; -webkit-hyphens: auto;
+  font-kerning: normal; text-rendering: optimizeLegibility;
+}
+#page[data-font="sans"] { font-family: var(--sans); line-height: 1.55; text-align: left; hyphens: manual; -webkit-hyphens: manual; }
+#flow { column-fill: auto; will-change: transform; }
+#flow > :first-child { margin-top: 1.4em; }
+#flow p { margin: 0; text-indent: 1.5em; orphans: 2; widows: 2; }
+#flow :is(h1, h2, h3, h4) + p { text-indent: 0; }
+#flow h1, #flow h2, #flow h3, #flow h4 {
+  text-align: center; text-indent: 0; line-height: 1.25; font-weight: 600; hyphens: manual; -webkit-hyphens: manual;
+  margin: 1.2em 0 1.1em; break-after: avoid; text-wrap: balance;
+}
+#flow h1 { font-size: 1.5em; }
+#flow h2 { font-size: 1.32em; }
+#flow h3 { font-size: 1.12em; }
+#flow h4 { font-size: 1em; }
+#flow blockquote { margin: 1em 1.4em; font-style: italic; }
+#flow ul, #flow ol { margin: 0.8em 0; padding-left: 1.5em; }
+#flow hr { border: 0; border-top: 1px solid var(--line); margin: 1.4em 30%; }
+#flow img { display: block; max-width: 100%; max-height: calc(var(--ph, 600px) - 2em); margin: 1em auto; object-fit: contain; break-inside: avoid; }
+#flow table { max-width: 100%; border-collapse: collapse; font-size: 0.9em; }
+#flow td, #flow th { padding: 0.2em 0.5em; border: 1px solid var(--line); }
+#flow a { color: inherit; }
+
+#foot {
+  height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 0 var(--gutter); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+#fch { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#fpct { flex: none; }
+
+/* ---------- barras ---------- */
+.bar { position: fixed; left: 0; right: 0; z-index: 10; background: var(--bar); color: var(--fg); }
+#top {
+  top: 0; display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line);
+  padding: env(safe-area-inset-top, 0px) 8px 0; min-height: calc(56px + env(safe-area-inset-top, 0px));
+}
+#btitle { flex: 1; min-width: 0; text-align: center; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 8px; }
+.ib {
+  width: 44px; height: 44px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+}
+.ib:hover { background: var(--line); }
+.ib.txt { width: auto; padding: 0 12px; font-family: var(--serif); font-size: 18px; font-weight: 600; }
+#bottom { bottom: 0; border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; }
+#bmeta { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#bch { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bleft { flex: none; }
+input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; margin: 0; }
+
+#scrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); }
+
+#toc {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 30; width: min(88vw, 22rem);
+  background: var(--bar); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px);
+}
+#toc header { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); }
+#toc h2 { margin: 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+#toclist { flex: 1; min-height: 0; overflow: auto; padding: 6px 0; }
+#toclist button {
+  display: block; width: 100%; text-align: left; padding: 12px 16px; min-height: 44px; border: 0; background: transparent; cursor: pointer;
+  font-family: var(--serif); font-size: 15px; line-height: 1.35;
+}
+#toclist button:hover { background: var(--line); }
+#toclist button[aria-current="true"] { color: var(--accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+#toc footer { display: grid; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+#toc footer .btn { min-height: 44px; }
+
+#sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; width: 100%; max-width: 36rem; margin-inline: auto;
+  max-height: 86%; overflow: auto; background: var(--bar); border: 1px solid var(--line); border-bottom: 0; border-radius: 14px 14px 0 0;
+  padding: 18px 20px calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 20px;
+}
+.row { display: grid; gap: 8px; }
+.lab { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.fsrow { display: flex; align-items: center; gap: 12px; }
+.fsrow span { font-family: var(--serif); color: var(--muted); }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { flex: 1; min-height: 44px; border: 0; border-right: 1px solid var(--line); background: transparent; cursor: pointer; padding: 0 8px; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.themes button {
+  min-height: 56px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; padding: 0 4px;
+  font-family: var(--serif); font-size: 15px; font-weight: 600; background: var(--sw-bg); color: var(--sw-fg);
+}
+.themes button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.themes small { display: block; font-family: var(--sans); font-weight: 400; font-size: 11px; margin-top: 2px; }
+
+#status, #toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 50; max-width: min(92vw, 28rem);
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; line-height: 1.4; text-align: center;
+}
+#status { top: 40%; }
+#toast { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+
+#dim, #warmov { position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: 0; }
+#dim { background: var(--veil); }
+#warmov { background: var(--amber); mix-blend-mode: multiply; }
+</style>
+</head>
+<body>
+
+<div id="app" data-state="home">
+  <section id="home">
+    <div class="home-in">
+      <h1>Penumbra</h1>
+      <p class="tag">Leitor de livros para ler com pouca luz, com texto calmo e brilho que vai abaixo do mínimo do aparelho.</p>
+      <div class="home-actions">
+        <label class="btn primary" for="file">Abrir livro</label>
+        <button class="btn" id="sampleBtn" type="button">Ver exemplo</button>
+      </div>
+      <input class="sr" id="file" type="file" accept=".epub,.pdf,.docx,.txt,.html,.htm,.md,.markdown,application/epub+zip,application/pdf,text/plain">
+      <p class="formats">EPUB · PDF · DOCX · TXT · HTML · MD</p>
+      <p class="sources">Arraste o arquivo para esta tela ou escolha no aparelho. A leitura acontece no navegador e o livro não é enviado a lugar nenhum. Livros livres de direitos autorais: <a href="https://dominiopublico.gov.br" target="_blank" rel="noopener">Domínio Público</a>, <a href="https://www.gutenberg.org" target="_blank" rel="noopener">Project Gutenberg</a> e <a href="https://pt.wikisource.org" target="_blank" rel="noopener">Wikisource</a>.</p>
+    </div>
+  </section>
+
+  <main id="stage" aria-label="Página do livro">
+    <div id="page" lang="pt-BR" data-font="serif"><div id="flow"></div></div>
+  </main>
+  <div id="foot"><span id="fch"></span><span id="fpct"></span></div>
+
+  <header id="top" class="bar" hidden>
+    <button class="ib" id="btnToc" type="button" aria-label="Sumário">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
+    </button>
+    <button class="ib" id="btnOpen" type="button" aria-label="Abrir outro arquivo">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    </button>
+    <div id="btitle"></div>
+    <button class="ib txt" id="btnAa" type="button" aria-label="Ajustes de leitura">Aa</button>
+  </header>
+
+  <footer id="bottom" class="bar" hidden>
+    <div id="bmeta"><span id="bch"></span><span id="bleft"></span></div>
+    <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Posição no livro">
+  </footer>
+
+  <div id="scrim" hidden></div>
+
+  <aside id="toc" hidden aria-label="Sumário">
+    <header>
+      <h2>Sumário</h2>
+      <button class="ib" id="tocClose" type="button" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+    <div id="toclist"></div>
+    <footer>
+      <button class="btn" id="tocOpen" type="button">Abrir outro livro</button>
+      <button class="btn" id="tocSample" type="button">Ver o exemplo de uso</button>
+    </footer>
+  </aside>
+
+  <section id="sheet" hidden aria-label="Ajustes de leitura">
+    <div class="row">
+      <span class="lab">Tamanho do texto</span>
+      <div class="fsrow"><span style="font-size:14px">A</span><input id="fs" type="range" min="0" max="6" step="1" aria-label="Tamanho do texto"><span style="font-size:26px">A</span></div>
+    </div>
+    <div class="row">
+      <span class="lab">Fonte</span>
+      <div class="seg">
+        <button type="button" data-set="font" data-v="serif" style="font-family:var(--serif)">Com serifa</button>
+        <button type="button" data-set="font" data-v="sans">Sem serifa</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lab">Tema</span>
+      <div class="themes">
+        <button type="button" data-set="theme" data-v="auto" style="--sw-bg:linear-gradient(135deg,#f6f5f1 50%,#141414 50%);--sw-fg:#8a8678">Aa<small>Auto</small></button>
+        <button type="button" data-set="theme" data-v="paper" style="--sw-bg:#f6f5f1;--sw-fg:#2a2825">Aa<small>Papel</small></button>
+        <button type="button" data-set="theme" data-v="sepia" style="--sw-bg:#efe4cc;--sw-fg:#3b2f22">Aa<small>Sépia</small></button>
+        <button type="button" data-set="theme" data-v="dark" style="--sw-bg:#141414;--sw-fg:#b9b4aa">Aa<small>Noturno</small></button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lab">Brilho</span>
+      <input id="bright" type="range" min="25" max="100" step="1" aria-label="Brilho">
+    </div>
+    <div class="row">
+      <span class="lab">Luz quente</span>
+      <input id="warm" type="range" min="0" max="100" step="1" aria-label="Luz quente">
+    </div>
+    <div class="row">
+      <span class="lab">Margens</span>
+      <div class="seg">
+        <button type="button" data-set="margin" data-v="0">Estreitas</button>
+        <button type="button" data-set="margin" data-v="1">Médias</button>
+        <button type="button" data-set="margin" data-v="2">Largas</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="status" role="status" hidden></div>
+  <div id="toast" role="status" hidden></div>
+</div>
+<div id="dim"></div>
+<div id="warmov"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const app = $('app'), stage = $('stage'), page = $('page'), flow = $('flow');
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const FS = [15, 16.5, 18, 20, 22, 25, 28];
+const GAP = 48;
+
+/* ---------- armazenamento (tudo opcional) ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
+};
+const idb = () => new Promise((res, rej) => {
+  const r = indexedDB.open('penumbra', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('books');
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+async function idbSet(k, v) {
+  try {
+    const db = await idb();
+    await new Promise((res, rej) => { const t = db.transaction('books', 'readwrite'); t.objectStore('books').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); });
+  } catch (e) { /* sem armazenamento */ }
+}
+async function idbGet(k) {
+  try {
+    const db = await idb();
+    return await new Promise((res, rej) => { const r = db.transaction('books').objectStore('books').get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  } catch (e) { return undefined; }
+}
+
+/* ---------- ajustes ---------- */
+const S = Object.assign({ fs: 2, font: 'serif', theme: 'auto', bright: 0.85, warm: 0, margin: 1 }, store.get('penumbra:settings', {}));
+const dimEl = $('dim'), warmEl = $('warmov');
+
+function applySettings() {
+  const root = document.documentElement;
+  if (S.theme === 'auto') root.removeAttribute('data-rt'); else root.setAttribute('data-rt', S.theme);
+  page.style.fontSize = FS[S.fs] + 'px';
+  page.dataset.font = S.font;
+  app.style.setProperty('--gutter', [16, 28, 44][S.margin] + 'px');
+  dimEl.style.opacity = String((1 - S.bright) * 0.85);
+  warmEl.style.opacity = String(S.warm * 0.4);
+  const tc = document.querySelector('meta[name="theme-color"]');
+  if (tc) tc.setAttribute('content', getComputedStyle(document.body).backgroundColor);
+}
+function syncControls() {
+  $('fs').value = S.fs;
+  $('bright').value = Math.round(S.bright * 100);
+  $('warm').value = Math.round(S.warm * 100);
+  document.querySelectorAll('[data-set]').forEach((b) => {
+    const k = b.dataset.set;
+    b.setAttribute('aria-pressed', String(S[k]) === b.dataset.v ? 'true' : 'false');
+  });
+}
+let rlTimer = 0;
+function schedRelayout() { clearTimeout(rlTimer); rlTimer = setTimeout(relayout, 120); }
+function commit(needsLayout) {
+  applySettings(); syncControls(); store.set('penumbra:settings', S);
+  if (needsLayout) schedRelayout();
+}
+document.querySelectorAll('[data-set]').forEach((b) => b.addEventListener('click', () => {
+  const k = b.dataset.set, v = b.dataset.v;
+  S[k] = (k === 'margin') ? +v : v;
+  commit(k !== 'theme');
+}));
+$('fs').addEventListener('input', (e) => { S.fs = +e.target.value; commit(true); });
+$('bright').addEventListener('input', (e) => { S.bright = +e.target.value / 100; commit(false); });
+$('warm').addEventListener('input', (e) => { S.warm = +e.target.value / 100; commit(false); });
+
+/* ---------- avisos ---------- */
+let toastTimer = 0;
+function notify(msg) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 6000);
+}
+function status(msg) { const s = $('status'); s.textContent = msg || ''; s.hidden = !msg; }
+function fail(msg) { const e = new Error(msg); e.userMessage = msg; return e; }
+
+/* ---------- utilidades de texto ---------- */
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const stripExt = (n) => n.replace(/\.[^.]+$/, '');
+const xml = (s) => new DOMParser().parseFromString(s, 'application/xml');
+function resolvePath(base, rel) {
+  try { const u = new URL(String(rel).split('#')[0], 'http://x/' + base); return decodeURIComponent(u.pathname.slice(1)); } catch (e) { return String(rel); }
+}
+const mime = (p) => ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' }[(p.split('.').pop() || '').toLowerCase()] || 'application/octet-stream');
+const plainLen = (html) => html.replace(/<[^>]+>/g, '').length;
+
+/* ---------- blocos de texto -> capítulos (TXT, MD, HTML, DOCX, PDF) ---------- */
+function chaptersFromBlocks(blocks, name) {
+  blocks = blocks.filter((b) => b.t && b.t.trim());
+  const hasTop = blocks.filter((b) => b.h === 1).length >= 2;
+  let list = [], cur = null;
+  const push = () => { if (cur && cur.blocks.length) list.push(cur); };
+  for (const b of blocks) {
+    if (hasTop && b.h === 1) { push(); cur = { title: b.t.slice(0, 80), blocks: [b] }; }
+    else { if (!cur) cur = { title: hasTop ? 'Início' : name, blocks: [] }; cur.blocks.push(b); }
+  }
+  push();
+  const out = [];
+  for (const c of list) {
+    const len = c.blocks.reduce((s, b) => s + b.t.length, 0);
+    if (len <= 30000) { out.push(c); continue; }
+    let part = [], acc = 0, idx = 1;
+    for (const b of c.blocks) {
+      part.push(b); acc += b.t.length;
+      if (acc >= 20000) { out.push({ title: idx === 1 ? c.title : c.title + ' (' + idx + ')', blocks: part }); part = []; acc = 0; idx++; }
+    }
+    if (part.length) out.push({ title: idx === 1 ? c.title : c.title + ' (' + idx + ')', blocks: part });
+  }
+  if (!hasTop && out.length > 1) {
+    out.forEach((c, i) => {
+      const pg = c.blocks.find((b) => b.pg);
+      c.title = 'Parte ' + (i + 1) + (pg ? ' · p. ' + pg.pg : '');
+    });
+  }
+  return out.map((c) => {
+    const html = c.blocks.map((b) => b.h === 1 ? '<h2>' + esc(b.t) + '</h2>' : b.h ? '<h3>' + esc(b.t) + '</h3>' : '<p>' + esc(b.t) + '</p>').join('');
+    return { title: c.title, html, len: Math.max(1, c.blocks.reduce((s, b) => s + b.t.length, 0)) };
+  });
+}
+
+/* ---------- TXT ---------- */
+function parseTxt(buf, name) {
+  let s = new TextDecoder('utf-8').decode(buf);
+  if (s.indexOf(String.fromCharCode(0xFFFD)) !== -1) s = new TextDecoder('windows-1252').decode(buf);
+  s = s.replace(/\r\n?/g, '\n');
+  let raw = s.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  if (raw.length < 4) raw = s.split('\n').map((l) => l.trim()).filter(Boolean);
+  const head = /^(cap[ií]tulo|chapter|parte|part|livro|book|pr[óo]logo|ep[ií]logo|pref[áa]cio|introdu[çc][ãa]o|pr[eé]face)\b/i;
+  const blocks = raw.map((b) => {
+    const t = b.replace(/\s*\n\s*/g, ' ');
+    const isH = t.length < 80 && !/[.,;]$/.test(t) && (head.test(t) || /^[IVXLC]{1,7}\.?$/.test(t));
+    return { t, h: isH ? 1 : 0 };
+  });
+  const chapters = chaptersFromBlocks(blocks, stripExt(name));
+  if (!chapters.length) throw fail('Este arquivo não tem texto.');
+  return { title: stripExt(name), chapters, lang: 'pt-BR' };
+}
+
+/* ---------- Markdown ---------- */
+function parseMd(buf, name) {
+  const s = new TextDecoder('utf-8').decode(buf).replace(/\r\n?/g, '\n');
+  const blocks = s.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean).map((b) => {
+    const m = b.match(/^(#{1,6})\s+(.*)$/s);
+    if (m) return { t: m[2].replace(/\s*\n\s*/g, ' '), h: m[1].length <= 2 ? 1 : 2 };
+    return { t: b.replace(/\s*\n\s*/g, ' ').replace(/\*\*(.+?)\*\*/g, '$1'), h: 0 };
+  });
+  const chapters = chaptersFromBlocks(blocks, stripExt(name));
+  if (!chapters.length) throw fail('Este arquivo não tem texto.');
+  return { title: stripExt(name), chapters, lang: 'pt-BR' };
+}
+
+/* ---------- HTML solto ---------- */
+function parseHtmlFile(buf, name) {
+  const doc = new DOMParser().parseFromString(new TextDecoder('utf-8').decode(buf), 'text/html');
+  doc.querySelectorAll('script,style,nav,header,footer').forEach((n) => n.remove());
+  const blocks = [];
+  doc.body.querySelectorAll('h1,h2,h3,h4,p,li,blockquote').forEach((el) => {
+    if (el.parentElement && el.parentElement.closest('p,li,blockquote')) return;
+    const t = el.textContent.replace(/\s+/g, ' ').trim();
+    if (!t) return;
+    const lv = /^H(\d)$/.exec(el.tagName);
+    blocks.push({ t, h: lv ? (+lv[1] <= 2 ? 1 : 2) : 0 });
+  });
+  const chapters = chaptersFromBlocks(blocks, stripExt(name));
+  if (!chapters.length) throw fail('Não encontrei texto neste arquivo.');
+  const t = doc.querySelector('title');
+  return { title: (t && t.textContent.trim()) || stripExt(name), chapters, lang: doc.documentElement.lang || 'pt-BR' };
+}
+
+/* ---------- DOCX ---------- */
+async function parseDocx(zip, name) {
+  const doc = xml(await zip.file('word/document.xml').async('string'));
+  const blocks = [];
+  for (const p of doc.getElementsByTagNameNS('*', 'p')) {
+    const t = [...p.getElementsByTagNameNS('*', 't')].map((n) => n.textContent).join('').replace(/\s+/g, ' ').trim();
+    if (!t) continue;
+    const ps = p.getElementsByTagNameNS('*', 'pStyle')[0];
+    const sv = ps ? (ps.getAttribute('w:val') || '') : '';
+    const m = /^(heading|ttulo|t[ií]tulo|title)\s*(\d)?/i.exec(sv);
+    blocks.push({ t, h: m ? ((+m[2] || 1) <= 1 ? 1 : 2) : 0 });
+  }
+  const chapters = chaptersFromBlocks(blocks, stripExt(name));
+  if (!chapters.length) throw fail('Não encontrei texto neste documento.');
+  let title = stripExt(name);
+  const core = zip.file('docProps/core.xml');
+  if (core) { const t = xml(await core.async('string')).getElementsByTagNameNS('*', 'title')[0]; if (t && t.textContent.trim()) title = t.textContent.trim(); }
+  return { title, chapters, lang: 'pt-BR' };
+}
+
+/* ---------- PDF (texto corrido) ---------- */
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('script'));
+    document.head.appendChild(s);
+  });
+}
+async function parsePdf(buf, name) {
+  try {
+    if (!window.pdfjsLib) { await loadScript(PDFJS + 'pdf.min.js'); await loadScript(PDFJS + 'pdf.worker.min.js'); }
+  } catch (e) { throw fail('Não consegui carregar o leitor de PDF. Verifique a conexão e tente de novo.'); }
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+  let pdf;
+  try { pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), useWorkerFetch: false, isEvalSupported: false }).promise; }
+  catch (e) { console.error(e); throw fail('Não consegui abrir este PDF. Ele pode estar protegido por senha ou danificado.'); }
+  const blocks = [];
+  const median = (a) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : 0; };
+  for (let p = 1; p <= pdf.numPages; p++) {
+    status('Lendo PDF… página ' + p + ' de ' + pdf.numPages);
+    const pg = await pdf.getPage(p);
+    const tc = await pg.getTextContent();
+    const lines = []; let cur = null, prevEnd = 0;
+    for (const it of tc.items) {
+      if (!('str' in it)) continue;
+      const y = it.transform[5], x = it.transform[4], h = Math.abs(it.transform[3]) || it.height || 10;
+      if (cur && Math.abs(y - cur.y) < h * 0.5) {
+        if (x - prevEnd > h * 0.15 && !cur.s.endsWith(' ') && !it.str.startsWith(' ')) cur.s += ' ';
+        cur.s += it.str;
+      } else {
+        if (cur) lines.push(cur);
+        cur = { y, s: it.str };
+      }
+      prevEnd = x + (it.width || 0);
+      if (it.hasEOL && cur) { lines.push(cur); cur = null; }
+    }
+    if (cur) lines.push(cur);
+    const ls = lines.map((l) => ({ y: l.y, s: l.s.replace(/\s+/g, ' ').trim() })).filter((l) => l.s && !/^\d{1,4}$/.test(l.s));
+    const gaps = []; for (let i = 1; i < ls.length; i++) { const g = ls[i - 1].y - ls[i].y; if (g > 0) gaps.push(g); }
+    const med = median(gaps) || 12;
+    let para = '', first = true;
+    const flush = () => {
+      if (!para) return;
+      const prev = blocks[blocks.length - 1];
+      if (first && prev && !/[.!?…:"”»)]$/.test(prev.t) && /^[a-zà-ÿ]/.test(para)) {
+        prev.t = prev.t.endsWith('-') ? prev.t.slice(0, -1) + para : prev.t + ' ' + para;
+      } else blocks.push({ t: para, h: 0, pg: p });
+      para = ''; first = false;
+    };
+    ls.forEach((l, i) => {
+      const gap = i ? ls[i - 1].y - l.y : 0;
+      if (i && gap > med * 1.45) flush();
+      if (!para) para = l.s;
+      else if (para.endsWith('-') && /^[a-zà-ÿ]/.test(l.s)) para = para.slice(0, -1) + l.s;
+      else para += ' ' + l.s;
+    });
+    flush();
+  }
+  const chars = blocks.reduce((s, b) => s + b.t.length, 0);
+  if (chars < 40) throw fail('Este PDF parece ser digitalizado (só imagens) e não tem texto para extrair.');
+  let title = stripExt(name);
+  try { const meta = await pdf.getMetadata(); if (meta && meta.info && meta.info.Title && meta.info.Title.trim()) title = meta.info.Title.trim(); } catch (e) { /* sem metadados */ }
+  return { title, chapters: chaptersFromBlocks(blocks, title), lang: 'pt-BR' };
+}
+
+/* ---------- EPUB ---------- */
+async function chapterHtml(zip, path, urls, cache) {
+  const f = zip.file(path);
+  if (!f) return { html: '', len: 0, heading: '', hasImg: false };
+  const doc = new DOMParser().parseFromString(await f.async('string'), 'text/html');
+  doc.querySelectorAll('script,style,link,meta,title,iframe,object,embed,form,audio,video').forEach((n) => n.remove());
+  for (const svg of [...doc.body.querySelectorAll('svg')]) {
+    const im = svg.querySelector('image');
+    const href = im && (im.getAttribute('xlink:href') || im.getAttribute('href'));
+    if (href) { const img = doc.createElement('img'); img.setAttribute('src', href); svg.replaceWith(img); } else svg.remove();
+  }
+  let hasImg = false;
+  for (const img of [...doc.body.querySelectorAll('img')]) {
+    const src = img.getAttribute('src');
+    const p = src ? resolvePath(path, src) : '';
+    const file = p && zip.file(p);
+    if (!file) { img.remove(); continue; }
+    if (!cache.has(p)) {
+      const blob = new Blob([await file.async('arraybuffer')], { type: mime(p) });
+      const u = URL.createObjectURL(blob); urls.push(u); cache.set(p, u);
+    }
+    img.setAttribute('src', cache.get(p)); img.removeAttribute('srcset'); hasImg = true;
+  }
+  doc.body.querySelectorAll('a').forEach((a) => a.replaceWith(...a.childNodes));
+  doc.body.querySelectorAll('*').forEach((el) => {
+    [...el.attributes].forEach((a) => { if (!['src', 'alt', 'colspan', 'rowspan'].includes(a.name)) el.removeAttribute(a.name); });
+  });
+  const h = doc.body.querySelector('h1,h2,h3');
+  return { html: doc.body.innerHTML, len: doc.body.textContent.trim().length, heading: h ? h.textContent.replace(/\s+/g, ' ').trim() : '', hasImg };
+}
+async function parseEpub(zip, name) {
+  const enc = zip.file('META-INF/encryption.xml');
+  if (enc) {
+    const t = await enc.async('string');
+    const algs = [...t.matchAll(/Algorithm="([^"]+)"/g)].map((m) => m[1]);
+    if (algs.some((a) => !/idpf\.org\/2008\/embedding|ns\.adobe\.com\/pdf\/enc#RC/.test(a))) throw fail('Este arquivo tem proteção (DRM) e não pode ser aberto aqui.');
+  }
+  const cont = xml(await zip.file('META-INF/container.xml').async('string'));
+  const root = cont.querySelector('rootfile');
+  if (!root) throw fail('Este EPUB está incompleto.');
+  const opfPath = root.getAttribute('full-path');
+  const opfFile = zip.file(opfPath);
+  if (!opfFile) throw fail('Este EPUB está incompleto.');
+  const opf = xml(await opfFile.async('string'));
+  const manifest = {};
+  opf.querySelectorAll('manifest > item').forEach((it) => {
+    manifest[it.getAttribute('id')] = { href: resolvePath(opfPath, it.getAttribute('href')), type: it.getAttribute('media-type') || '', props: it.getAttribute('properties') || '' };
+  });
+  const spine = [...opf.querySelectorAll('spine > itemref')].map((r) => manifest[r.getAttribute('idref')]).filter(Boolean).filter((m) => /x?html/.test(m.type));
+  const meta = (tag) => { const n = opf.getElementsByTagNameNS('*', tag)[0]; return n ? n.textContent.trim() : ''; };
+
+  const tocMap = new Map();
+  const items = Object.values(manifest);
+  const navItem = items.find((m) => /\bnav\b/.test(m.props));
+  if (navItem && zip.file(navItem.href)) {
+    const d = new DOMParser().parseFromString(await zip.file(navItem.href).async('string'), 'text/html');
+    const navs = [...d.querySelectorAll('nav')];
+    const nav = navs.find((n) => /toc/.test(n.getAttribute('epub:type') || '')) || navs[0];
+    if (nav) nav.querySelectorAll('a[href]').forEach((a) => {
+      const p = resolvePath(navItem.href, a.getAttribute('href')); const t = a.textContent.replace(/\s+/g, ' ').trim();
+      if (t && !tocMap.has(p)) tocMap.set(p, t);
+    });
+  }
+  if (!tocMap.size) {
+    const ncx = items.find((m) => /dtbncx/.test(m.type));
+    if (ncx && zip.file(ncx.href)) {
+      xml(await zip.file(ncx.href).async('string')).querySelectorAll('navPoint').forEach((np) => {
+        const lab = np.querySelector('navLabel'); const c = np.querySelector('content');
+        const t = lab ? lab.textContent.replace(/\s+/g, ' ').trim() : '';
+        if (t && c) { const p = resolvePath(ncx.href, c.getAttribute('src')); if (!tocMap.has(p)) tocMap.set(p, t); }
+      });
+    }
+  }
+
+  const urls = [], cache = new Map(), chapters = [];
+  let n = 0;
+  for (const m of spine) {
+    n++; status('Preparando o livro… ' + n + ' de ' + spine.length);
+    const r = await chapterHtml(zip, m.href, urls, cache);
+    if (!r.len && !r.hasImg) continue;
+    const title = tocMap.get(m.href) || r.heading || (r.len ? 'Seção ' + (chapters.length + 1) : 'Capa');
+    chapters.push({ title, html: r.html, len: Math.max(1, r.len) });
+  }
+  if (!chapters.length) throw fail('Não encontrei texto neste EPUB.');
+  const lang = meta('language');
+  return { title: meta('title') || stripExt(name), author: meta('creator'), chapters, urls, lang: /^[a-z]{2,3}(-[A-Za-z0-9]+)*$/.test(lang) ? lang : 'pt-BR' };
+}
+
+/* ---------- despacho por formato ---------- */
+async function buildBook(buf, name, size) {
+  const head = String.fromCharCode(...new Uint8Array(buf.slice(0, 4)));
+  const ext = ((name.match(/\.([^.]+)$/) || [])[1] || '').toLowerCase();
+  let b;
+  if (head.startsWith('%PDF')) b = await parsePdf(buf, name);
+  else if (head.startsWith('PK')) {
+    if (!window.JSZip) throw fail('Não consegui carregar o leitor de arquivos. Verifique a conexão e tente de novo.');
+    let zip;
+    try { zip = await window.JSZip.loadAsync(buf); } catch (e) { throw fail('Não consegui abrir este arquivo compactado.'); }
+    if (zip.file('META-INF/container.xml')) b = await parseEpub(zip, name);
+    else if (zip.file('word/document.xml')) b = await parseDocx(zip, name);
+    else throw fail('Formato não reconhecido. Use EPUB, PDF, DOCX, TXT, HTML ou MD.');
+  }
+  else if (['html', 'htm', 'xhtml'].includes(ext)) b = parseHtmlFile(buf, name);
+  else if (['md', 'markdown'].includes(ext)) b = parseMd(buf, name);
+  else if (['mobi', 'azw', 'azw3', 'kfx', 'doc'].includes(ext)) throw fail('Este formato não é aceito. Converta para EPUB (se o arquivo não tiver DRM) e abra de novo.');
+  else b = parseTxt(buf, name);
+  b.id = name + ':' + size;
+  return b;
+}
+
+/* ---------- livro de exemplo (texto original) ---------- */
+function sampleBook() {
+  const chapters = [
+    { title: 'Como ler aqui', html: '<h2>Como ler aqui</h2>' +
+      '<p>Este é um livro de exemplo, escrito só para mostrar como o leitor funciona. Nada aqui precisa ser lido com atenção, mas vale passar as páginas para sentir o ritmo do texto.</p>' +
+      '<p>Para avançar, toque na lateral direita da tela ou deslize o dedo para a esquerda. Para voltar, toque na lateral esquerda ou deslize para a direita. No computador, as setas do teclado, a barra de espaço e as teclas Page Up e Page Down fazem o mesmo.</p>' +
+      '<p>Um toque no centro da tela mostra as barras de controle. No alto ficam o botão do sumário, o botão para abrir outro arquivo e o botão Aa, que reúne os ajustes de leitura. Embaixo fica a barra de progresso, que você pode arrastar para ir a qualquer ponto do livro.</p>' +
+      '<p>No rodapé, sempre visível, aparecem o nome do capítulo e a porcentagem lida. A barra de baixo também informa quantos minutos faltam para terminar o capítulo.</p>' },
+    { title: 'Ajustes para a noite', html: '<h2>Ajustes para a noite</h2>' +
+      '<p>O ajuste de brilho escurece a tela por cima de tudo, inclusive dos menus, e vai além do mínimo que o aparelho permite. Isso ajuda quando o brilho do próprio celular já está no nível mais baixo e ainda incomoda.</p>' +
+      '<p>A luz quente acrescenta um tom âmbar ao conjunto e reduz o azul. Use pouco no início e aumente aos poucos, até que o branco da página deixe de chamar atenção.</p>' +
+      '<p>Há três temas. O Papel tem fundo claro e é o mais parecido com uma página impressa. O Sépia é amarelado e mais suave. O Noturno tem fundo escuro e texto em cinza claro, sem branco puro. O modo Auto segue o tema do aparelho.</p>' +
+      '<p>O tamanho da letra vai de pequeno a grande em sete passos, e as margens podem ser estreitas, médias ou largas. A fonte com serifa foi desenhada para leitura em tela. A sem serifa fica à disposição de quem prefere linhas mais limpas.</p>' +
+      '<p>Ao mudar qualquer ajuste, o leitor refaz as páginas e mantém você no mesmo ponto do texto.</p>' },
+    { title: 'Seus livros', html: '<h2>Seus livros</h2>' +
+      '<p>O leitor abre arquivos EPUB, PDF, DOCX, TXT, HTML e Markdown. Ele não abre livros protegidos por DRM e não baixa nada sozinho. Você escolhe o arquivo no seu aparelho e a leitura acontece inteira no navegador.</p>' +
+      '<p>O PDF é convertido em texto corrido para caber bem na tela do celular. Por isso o layout original, as imagens e as tabelas se perdem, e um PDF digitalizado, feito só de imagens, não pode ser lido. Para livros, o EPUB costuma dar o melhor resultado.</p>' +
+      '<p>Há boas fontes de livros livres de direitos autorais, como o portal Domínio Público, o Projeto Gutenberg e a Wikisource. Obras antigas, cujos direitos já expiraram, costumam estar disponíveis ali.</p>' +
+      '<p>O último livro aberto fica guardado neste navegador, junto com a página onde você parou. Na próxima visita, a leitura continua do mesmo ponto. Se os dados do navegador forem apagados, basta escolher o arquivo de novo.</p>' +
+      '<p>Boa leitura.</p>' }
+  ];
+  chapters.forEach((c) => { c.len = plainLen(c.html); });
+  return { id: 'sample', title: 'Exemplo de uso', chapters, lang: 'pt-BR' };
+}
+
+/* ---------- paginação ---------- */
+let book = null, cum = [], total = 1, ch = 0, pages = 1, pi = 0, W = 0, H = 0, tok = 0;
+
+async function layout(target) {
+  const my = ++tok;
+  const cs = getComputedStyle(stage);
+  const avail = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  W = Math.floor(Math.min(avail, FS[S.fs] * 34));
+  H = Math.floor(stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+  if (W < 80 || H < 80) return;
+  page.style.width = W + 'px'; page.style.height = H + 'px'; page.style.setProperty('--ph', H + 'px');
+  Object.assign(flow.style, { width: W + 'px', height: H + 'px', columnWidth: W + 'px', columnGap: GAP + 'px' });
+  try { await Promise.race([document.fonts.load(FS[S.fs] + 'px Literata'), new Promise((r) => setTimeout(r, 1200))]); } catch (e) { /* segue com a fonte reserva */ }
+  const imgs = [...flow.querySelectorAll('img')];
+  await Promise.all(imgs.map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))));
+  if (my !== tok) return;
+  pages = Math.max(1, Math.round((flow.scrollWidth + GAP) / (W + GAP)));
+  pi = target === 'last' ? pages - 1 : Math.min(pages - 1, Math.max(0, Math.floor((+target || 0) * pages + 1e-6)));
+  render();
+}
+async function showChapter(i, target) {
+  ch = i;
+  flow.innerHTML = book.chapters[i].html;
+  flow.style.transform = 'none';
+  await layout(target);
+}
+function relayout() { if (book) layout(pages ? pi / pages : 0); }
+
+function frac() { return (cum[ch] + (pi / pages) * book.chapters[ch].len) / total; }
+function render() {
+  flow.style.transform = 'translate3d(' + (-pi * (W + GAP)) + 'px,0,0)';
+  const c = book.chapters[ch];
+  const pct = Math.min(100, Math.round(100 * (cum[ch] + ((pi + 1) / pages) * c.len) / total));
+  $('fch').textContent = c.title;
+  $('fpct').textContent = pct + '%';
+  $('bch').textContent = c.title;
+  const rem = (1 - (pi + 1) / pages) * c.len, min = rem / 1000;
+  $('bleft').textContent = rem <= 0 ? 'Fim do capítulo' : min < 1 ? 'Menos de 1 min no capítulo' : Math.round(min) + ' min restantes no capítulo';
+  if (document.activeElement !== $('scrub')) $('scrub').value = String(Math.round(frac() * 1000));
+  store.set('penumbra:pos:' + book.id, { ch, f: pi / pages });
+}
+function next() {
+  if (pi < pages - 1) { pi++; render(); }
+  else if (ch < book.chapters.length - 1) showChapter(ch + 1, 0);
+}
+function prev() {
+  if (pi > 0) { pi--; render(); }
+  else if (ch > 0) showChapter(ch - 1, 'last');
+}
+
+/* ---------- abrir livros ---------- */
+async function startBook(b) {
+  if (book && book.urls) book.urls.forEach((u) => URL.revokeObjectURL(u));
+  book = b; cum = []; let t = 0;
+  b.chapters.forEach((c) => { cum.push(t); t += c.len; });
+  total = Math.max(1, t);
+  page.lang = b.lang || 'pt-BR';
+  $('btitle').textContent = b.title;
+  app.dataset.state = 'reading';
+  hideUI();
+  buildToc();
+  const pos = store.get('penumbra:pos:' + b.id, { ch: 0, f: 0 });
+  await showChapter(Math.min(Math.max(0, pos.ch | 0), b.chapters.length - 1), pos.f || 0);
+}
+async function openBuffer(buf, name, size, persist) {
+  status('Abrindo livro…');
+  try {
+    const b = await buildBook(buf, name, size);
+    await startBook(b);
+    if (persist) idbSet('last', { name, size, buf });
+  } catch (e) {
+    console.error(e);
+    notify(e && e.userMessage ? e.userMessage : 'Não consegui abrir este arquivo.');
+  } finally { status(''); }
+}
+async function openFile(file) { await openBuffer(await file.arrayBuffer(), file.name, file.size, true); }
+$('file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) openFile(f); e.target.value = ''; });
+$('btnOpen').addEventListener('click', () => $('file').click());
+$('tocOpen').addEventListener('click', () => $('file').click());
+$('sampleBtn').addEventListener('click', () => startBook(sampleBook()));
+$('tocSample').addEventListener('click', () => startBook(sampleBook()));
+window.addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('drag'); });
+window.addEventListener('dragleave', () => document.body.classList.remove('drag'));
+window.addEventListener('drop', (e) => {
+  e.preventDefault(); document.body.classList.remove('drag');
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) openFile(f);
+});
+
+/* ---------- barras, sumário e ajustes ---------- */
+function buildToc() {
+  const list = $('toclist'); list.textContent = '';
+  book.chapters.forEach((c, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = c.title; b.dataset.i = String(i);
+    b.addEventListener('click', () => { hideUI(); showChapter(i, 0); });
+    list.appendChild(b);
+  });
+}
+const uiOpen = () => !$('top').hidden || !$('sheet').hidden || !$('toc').hidden;
+function hideUI() { ['top', 'bottom', 'sheet', 'toc', 'scrim'].forEach((id) => { $(id).hidden = true; }); }
+function showBars() { $('top').hidden = false; $('bottom').hidden = false; }
+function openToc() {
+  hideUI(); $('toc').hidden = false; $('scrim').hidden = false;
+  const cur = $('toclist').querySelector('[data-i="' + ch + '"]');
+  $('toclist').querySelectorAll('button').forEach((b) => b.setAttribute('aria-current', b === cur ? 'true' : 'false'));
+  if (cur) cur.scrollIntoView({ block: 'center' });
+}
+function openSheet() { hideUI(); $('sheet').hidden = false; $('scrim').hidden = false; }
+$('btnToc').addEventListener('click', openToc);
+$('btnAa').addEventListener('click', openSheet);
+$('tocClose').addEventListener('click', hideUI);
+$('scrim').addEventListener('click', hideUI);
+
+$('scrub').addEventListener('change', (e) => {
+  const f = +e.target.value / 1000 * total;
+  let i = 0; while (i < cum.length - 1 && cum[i + 1] <= f) i++;
+  const local = Math.min(1, Math.max(0, (f - cum[i]) / book.chapters[i].len));
+  e.target.blur(); showChapter(i, local);
+});
+$('scrub').addEventListener('input', (e) => {
+  const f = +e.target.value / 1000 * total;
+  let i = 0; while (i < cum.length - 1 && cum[i + 1] <= f) i++;
+  $('bch').textContent = book.chapters[i].title;
+  $('bleft').textContent = Math.round(+e.target.value / 10) + '%';
+});
+
+/* ---------- toque, deslize e teclado ---------- */
+let down = null;
+stage.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
+stage.addEventListener('pointercancel', () => { down = null; });
+stage.addEventListener('pointerup', (e) => {
+  if (!down || !book) return;
+  const dx = e.clientX - down.x, dy = e.clientY - down.y; down = null;
+  if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) next(); else prev(); return; }
+  if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
+  if (String(window.getSelection && window.getSelection()).length) return;
+  if (uiOpen()) { hideUI(); return; }
+  const r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
+  if (x < 0.3) prev(); else if (x > 0.7) next(); else showBars();
+});
+document.addEventListener('keydown', (e) => {
+  if (app.dataset.state !== 'reading') return;
+  if (e.key === 'Escape') { hideUI(); return; }
+  if (e.target && e.target.matches && e.target.matches('input')) return;
+  if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); next(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+});
+window.addEventListener('resize', schedRelayout);
+if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', schedRelayout);
+
+/* ---------- início ---------- */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* opcional */ }
+applySettings(); syncControls();
+(async () => {
+  const last = await idbGet('last');
+  if (last && last.buf) await openBuffer(last.buf, last.name, last.size, false);
+})();
+})();
+</script>
+</body>
+</html>
