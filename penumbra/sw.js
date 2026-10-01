@@ -1,6 +1,6 @@
 /* Penumbra: service worker. Guarda o app para uso offline.
    Suba a versão abaixo sempre que alterar qualquer arquivo do app. */
-const VERSION = 'penumbra-v2';
+const VERSION = 'penumbra-v3';
 const SHELL = [
   './',
   'index.html',
@@ -11,20 +11,24 @@ const SHELL = [
   'icons/icon-maskable-512.png',
   'icons/apple-touch-icon.png'
 ];
-// Bibliotecas e fontes vêm de CDNs. Ficam guardadas na primeira vez que são usadas.
+// Bibliotecas e fonte vêm de CDNs com CORS. Ficam guardadas para funcionar sem internet.
 const CDN_HOSTS = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 const PRECACHE_CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+  PDFJS + 'pdf.min.js',
+  PDFJS + 'pdf.worker.min.js',
   'https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap'
 ];
+const corsReq = (url) => new Request(url, { mode: 'cors', credentials: 'omit' });
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(VERSION);
     await cache.addAll(SHELL);
-    // Tenta guardar as bibliotecas já na instalação; se estiver sem rede, elas entram depois.
+    // Se estiver sem rede agora, as bibliotecas entram no cache no primeiro uso.
     await Promise.all(PRECACHE_CDN.map(async (url) => {
-      try { const r = await fetch(url, { mode: 'no-cors' }); await cache.put(url, r); } catch (e) { /* tenta de novo no uso */ }
+      try { const r = await fetch(corsReq(url)); if (r.ok) await cache.put(url, r); } catch (e) { /* tenta no uso */ }
     }));
     await self.skipWaiting();
   })());
@@ -43,7 +47,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Páginas: usa a cópia guardada e atualiza em segundo plano.
+  // Página: busca a versão nova; sem rede, usa a cópia guardada.
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(VERSION);
@@ -59,14 +63,15 @@ self.addEventListener('fetch', (event) => {
   const sameOrigin = url.origin === self.location.origin;
   if (!sameOrigin && !CDN_HOSTS.includes(url.hostname)) return;
 
-  // Demais arquivos: cópia guardada primeiro; se não houver, busca na rede e guarda.
+  // Demais arquivos: cópia guardada primeiro; se não houver, busca e guarda.
+  // Arquivos de CDN são sempre buscados com CORS, para servirem tanto a <script> quanto a fetch().
   event.respondWith((async () => {
     const cache = await caches.open(VERSION);
-    const hit = await cache.match(req);
+    const hit = await cache.match(req.url);
     if (hit) return hit;
     try {
-      const r = await fetch(req);
-      if (r && (r.ok || r.type === 'opaque')) cache.put(req, r.clone());
+      const r = await fetch(sameOrigin ? req : corsReq(req.url));
+      if (r && r.ok) cache.put(req.url, r.clone());
       return r;
     } catch (e) {
       return Response.error();
