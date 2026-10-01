@@ -273,6 +273,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
 }
 #status { top: 40%; }
 #toast { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+.tact { display: block; margin: 6px auto 0; min-height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 
 #dim, #warmov { position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: 0; }
 #dim { background: var(--veil); }
@@ -535,16 +536,25 @@ async function idbAll(st) {
 
 /* ================= avisos ================= */
 let toastTimer = 0;
-function notify(msg) {
+// act: { label, run } acrescenta um botão ao aviso, que fica mais tempo na tela.
+function notify(msg, act) {
   const t = $('toast'); t.textContent = msg; t.hidden = false;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
+  if (act) {
+    const b = el('button', 'tact', act.label); b.type = 'button';
+    b.addEventListener('click', () => { t.hidden = true; act.run(); });
+    t.appendChild(b);
+  }
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, act ? 9000 : 5000);
 }
 function status(msg) { const s = $('status'); s.textContent = msg || ''; s.hidden = !msg; }
 function fail(msg) { const e = new Error(msg); e.userMessage = msg; return e; }
 
 /* ================= ajustes ================= */
-const DEF = { fs: 2, font: 'serif', theme: 'auto', bright: 0.85, warm: 0, margin: 1, fit: 'page', crop: true, spread: false, fsAuto: true, orient: 'auto', wake: true, pdfMode: 'page' };
-const S = Object.assign({}, DEF, store.get('penumbra:settings', {}));
+const DEF = { fs: 2, font: 'serif', theme: 'auto', bright: 0.85, warm: 0, margin: 1, fit: 'page', crop: true, spread: false, fsAuto: true, orient: 'auto', wake: true, pdfMode: 'text', pdfDef: 2 };
+const saved = store.get('penumbra:settings', {});
+// O padrão dos PDFs passou a ser texto corrido: ajustes salvos antes disso mudam uma vez.
+if (saved.pdfMode && saved.pdfDef !== DEF.pdfDef) { saved.pdfMode = DEF.pdfMode; saved.pdfDef = DEF.pdfDef; store.set('penumbra:settings', saved); }
+const S = Object.assign({}, DEF, saved);
 const RELAYOUT = new Set(['fs', 'font', 'margin', 'fit', 'crop', 'spread']);
 const parseV = (v) => (v === 'true' ? true : v === 'false' ? false : /^\d+$/.test(v) ? +v : v);
 
@@ -1207,9 +1217,9 @@ function sampleBook() {
       '<p>Um toque no centro da tela mostra as barras de controle. No alto ficam a seta para voltar à biblioteca, o sumário, a tela cheia e o botão Aa, com os ajustes. Embaixo fica a barra de progresso, que você pode arrastar.</p>' +
       '<p>O botão voltar do celular leva de volta à biblioteca, onde cada livro mostra a porcentagem já lida.</p>' },
     { title: 'PDF', html: '<h2>PDF</h2>' +
-      '<p>O PDF abre na página original, do jeito que foi diagramado. As margens brancas são cortadas para a letra ficar maior. Para ampliar, faça o movimento de pinça ou toque duas vezes no centro; com a página ampliada, arraste para mover.</p>' +
-      '<p>No encaixe Largura, a página ocupa a largura da tela e você rola para baixo. Ao chegar ao fim da página, o próximo movimento passa para a seguinte.</p>' +
-      '<p>Se o PDF tiver só texto corrido, o modo Texto, nos ajustes, refaz as linhas para caber na tela. Livros com colunas, tabelas ou notas ficam melhores na página original.</p>' },
+      '<p>O PDF abre em texto corrido: as linhas são refeitas para caber na tela, como neste exemplo, e a letra segue os seus ajustes.</p>' +
+      '<p>Livros com colunas, tabelas, imagens ou fórmulas ficam melhores na página original, do jeito que foram diagramados. Para trocar, use o botão no topo da leitura ou os ajustes. Na página original, as margens brancas são cortadas para a letra ficar maior; para ampliar, faça o movimento de pinça ou toque duas vezes no centro.</p>' +
+      '<p>No encaixe Largura, a página ocupa a largura da tela e você rola para baixo. Ao chegar ao fim da página, o próximo movimento passa para a seguinte.</p>' },
     { title: 'Ajustes para a noite', html: '<h2>Ajustes para a noite</h2>' +
       '<p>O ajuste de brilho escurece a tela por cima de tudo e vai além do mínimo que o aparelho permite. A luz quente acrescenta um tom âmbar e reduz o azul.</p>' +
       '<p>Há três temas. O Papel tem fundo claro. O Sépia é amarelado e mais suave. O Noturno tem fundo escuro e texto em cinza claro, e também escurece as páginas de PDF. O modo Auto segue o tema do aparelho.</p>' +
@@ -1809,7 +1819,15 @@ async function openFromLibrary(id) {
         let b;
         try { b = await pdfTextBook(doc, meta); }
         catch (e) { if (e && e.userMessage) { meta.mode = 'page'; idbPut('lib', meta.id, meta); } notify((e && e.userMessage) || 'O texto corrido não funcionou neste PDF.'); }
-        if (b) { doc.destroy(); await startReading(T, meta, () => T.open(b, meta)); return; }
+        if (b) {
+          doc.destroy(); await startReading(T, meta, () => T.open(b, meta));
+          // Aberto pelo padrão, sem o leitor ter escolhido: avisa uma vez por livro como voltar à página original.
+          if (!meta.mode && !meta.modeTip) {
+            meta.modeTip = true; idbPut('lib', meta.id, meta);
+            notify('Este PDF abriu em texto corrido.', { label: 'Ver a página original', run: () => switchMode('page') });
+          }
+          return;
+        }
       }
       await startReading(P, meta, () => P.open(doc, meta));
       return;
