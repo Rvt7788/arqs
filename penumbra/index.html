@@ -22,7 +22,7 @@ body { margin: 0; }
 img { max-width: 100%; }
 [hidden] { display: none !important; }
 
-/* Layout: tela cheia com página paginada em colunas; um toque no centro abre as barras, que flutuam sobre o texto. */
+/* Layout: biblioteca em grade (tela inicial) e leitor em tela cheia; barras e painéis flutuam sobre o texto. */
 :root {
   --bg: #f6f5f1;
   --fg: #2a2825;
@@ -81,24 +81,63 @@ button { font: inherit; color: inherit; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 #app { --gutter: 28px; position: relative; height: 100%; display: flex; flex-direction: column; }
-
-/* ---------- início ---------- */
-#home { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px 16px; overflow: auto; }
 #app[data-state="reading"] #home { display: none; }
 #app[data-state="home"] #stage, #app[data-state="home"] #foot { display: none; }
-.home-in { width: 100%; max-width: 26rem; display: grid; gap: 18px; }
-.home-in h1 { margin: 0; font-family: var(--serif); font-weight: 600; font-size: 3rem; letter-spacing: -0.01em; line-height: 1; }
-.home-in .tag { margin: 0; color: var(--muted); line-height: 1.5; max-width: 30ch; }
-.home-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.formats { margin: 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.sources { margin: 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
-.sources a { color: var(--accent); }
-body.drag .home-in { outline: 2px dashed var(--accent); outline-offset: 14px; }
+
 .btn {
-  min-height: 48px; padding: 0 20px; border-radius: 8px; border: 1px solid var(--line);
-  background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: 0 18px; border-radius: 8px; border: 1px solid var(--line);
+  background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
 }
 .btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+.ib {
+  width: 44px; height: 44px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+}
+.ib:hover { background: var(--line); }
+.ib.txt { width: auto; padding: 0 12px; font-family: var(--serif); font-size: 18px; font-weight: 600; }
+
+/* ---------- biblioteca ---------- */
+#home { position: absolute; inset: 0; overflow: auto; padding: 0 20px 40px; }
+.homehead {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 0 12px; background: var(--bg);
+}
+.homehead h1 { margin: 0; font-family: var(--serif); font-weight: 600; font-size: 1.9rem; letter-spacing: -0.01em; line-height: 1; }
+.homehead .acts { display: flex; align-items: center; gap: 6px; }
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 26px 16px; padding-top: 10px; }
+.card { position: relative; min-width: 0; }
+.open { display: grid; gap: 6px; width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; color: inherit; }
+.cover {
+  position: relative; display: block; aspect-ratio: 2 / 3; border-radius: 4px; overflow: hidden;
+  background: var(--line) center / cover no-repeat;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 16px -10px rgba(0, 0, 0, 0.5);
+}
+.cover.gen {
+  background: hsl(var(--h) 16% 26%); color: hsl(var(--h) 18% 90%);
+  display: flex; flex-direction: column; justify-content: space-between; padding: 14px 12px;
+}
+.gt {
+  font-family: var(--serif); font-weight: 600; font-size: 15px; line-height: 1.22;
+  display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ga { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct { font-size: 14px; line-height: 1.3; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ca { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prog { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meter { flex: 1; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+.more {
+  position: absolute; top: 6px; right: 6px; width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.5); color: #fff;
+}
+.empty { padding: 28px 0 8px; display: grid; gap: 12px; max-width: 26rem; }
+.empty p { margin: 0; line-height: 1.55; }
+.empty .lead { font-family: var(--serif); font-size: 1.25rem; }
+.empty .formats { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sources { margin: 36px 0 0; font-size: 13px; line-height: 1.7; color: var(--muted); max-width: 34rem; }
+.sources a, .linkbtn { color: var(--accent); }
+.linkbtn { background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; font-size: 13px; }
+body.drag #home { outline: 2px dashed var(--accent); outline-offset: -10px; }
 
 /* ---------- leitura ---------- */
 #stage { position: relative; flex: 1; min-height: 0; padding: 20px var(--gutter) 8px; touch-action: pan-y; cursor: default; }
@@ -129,26 +168,16 @@ body.drag .home-in { outline: 2px dashed var(--accent); outline-offset: 14px; }
 #flow td, #flow th { padding: 0.2em 0.5em; border: 1px solid var(--line); }
 #flow a { color: inherit; }
 
-#foot {
-  height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 0 var(--gutter); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
-}
+#foot { height: 34px; display: flex; align-items: center; padding: 0 var(--gutter); font-size: 12px; color: var(--muted); }
 #fch { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#fpct { flex: none; }
 
-/* ---------- barras ---------- */
+/* ---------- barras e painéis ---------- */
 .bar { position: fixed; left: 0; right: 0; z-index: 10; background: var(--bar); color: var(--fg); }
 #top {
   top: 0; display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line);
   padding: env(safe-area-inset-top, 0px) 8px 0; min-height: calc(56px + env(safe-area-inset-top, 0px));
 }
 #btitle { flex: 1; min-width: 0; text-align: center; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 8px; }
-.ib {
-  width: 44px; height: 44px; flex: none; display: inline-flex; align-items: center; justify-content: center;
-  border: 0; border-radius: 8px; background: transparent; cursor: pointer;
-}
-.ib:hover { background: var(--line); }
-.ib.txt { width: auto; padding: 0 12px; font-family: var(--serif); font-size: 18px; font-weight: 600; }
 #bottom { bottom: 0; border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; }
 #bmeta { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 #bch { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -164,21 +193,22 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
 }
 #toc header { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); }
 #toc h2 { margin: 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
-#toclist { flex: 1; min-height: 0; overflow: auto; padding: 6px 0; }
+#toclist { flex: 1; min-height: 0; overflow: auto; padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px)); }
 #toclist button {
   display: block; width: 100%; text-align: left; padding: 12px 16px; min-height: 44px; border: 0; background: transparent; cursor: pointer;
   font-family: var(--serif); font-size: 15px; line-height: 1.35;
 }
 #toclist button:hover { background: var(--line); }
 #toclist button[aria-current="true"] { color: var(--accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
-#toc footer { display: grid; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
-#toc footer .btn { min-height: 44px; }
 
-#sheet {
+#sheet, #bsheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; width: 100%; max-width: 36rem; margin-inline: auto;
   max-height: 86%; overflow: auto; background: var(--bar); border: 1px solid var(--line); border-bottom: 0; border-radius: 14px 14px 0 0;
   padding: 18px 20px calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 20px;
 }
+#bsheet { gap: 12px; }
+#bsTitle { margin: 0; font-family: var(--serif); font-size: 1.1rem; line-height: 1.3; }
+#bsheet p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .row { display: grid; gap: 8px; }
 .lab { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .fsrow { display: flex; align-items: center; gap: 12px; }
@@ -210,33 +240,42 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
 <body>
 
 <div id="app" data-state="home">
-  <section id="home">
-    <div class="home-in">
+  <section id="home" aria-label="Biblioteca">
+    <header class="homehead">
       <h1>Penumbra</h1>
-      <p class="tag">Leitor de livros para ler com pouca luz, com texto calmo e brilho que vai abaixo do mínimo do aparelho.</p>
-      <div class="home-actions">
-        <label class="btn primary" for="file">Abrir livro</label>
-        <button class="btn" id="sampleBtn" type="button">Ver exemplo</button>
+      <div class="acts">
+        <button class="ib" id="homeSettings" type="button" aria-label="Ajustes">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+        </button>
+        <label class="btn primary" for="file">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Adicionar
+        </label>
       </div>
-      <input class="sr" id="file" type="file" accept=".epub,.pdf,.docx,.txt,.html,.htm,.md,.markdown,application/epub+zip,application/pdf,text/plain">
+    </header>
+    <input class="sr" id="file" type="file" multiple accept=".epub,.pdf,.docx,.txt,.html,.htm,.md,.markdown,application/epub+zip,application/pdf,text/plain">
+    <div id="shelf" class="shelf"></div>
+    <div id="empty" class="empty" hidden>
+      <p class="lead">Sua biblioteca está vazia.</p>
+      <p>Toque em Adicionar e escolha um livro no aparelho. Você também pode arrastar o arquivo para esta tela. A leitura acontece no navegador e o livro não é enviado a lugar nenhum.</p>
       <p class="formats">EPUB · PDF · DOCX · TXT · HTML · MD</p>
-      <p class="sources">Arraste o arquivo para esta tela ou escolha no aparelho. A leitura acontece no navegador e o livro não é enviado a lugar nenhum. Livros livres de direitos autorais: <a href="https://dominiopublico.gov.br" target="_blank" rel="noopener">Domínio Público</a>, <a href="https://www.gutenberg.org" target="_blank" rel="noopener">Project Gutenberg</a> e <a href="https://pt.wikisource.org" target="_blank" rel="noopener">Wikisource</a>.</p>
     </div>
+    <p class="sources">Livros livres de direitos autorais: <a href="https://dominiopublico.gov.br" target="_blank" rel="noopener">Domínio Público</a>, <a href="https://www.gutenberg.org" target="_blank" rel="noopener">Project Gutenberg</a> e <a href="https://pt.wikisource.org" target="_blank" rel="noopener">Wikisource</a>. <button class="linkbtn" id="sampleBtn" type="button">Ver o exemplo de uso</button></p>
   </section>
 
   <main id="stage" aria-label="Página do livro">
     <div id="page" lang="pt-BR" data-font="serif"><div id="flow"></div></div>
   </main>
-  <div id="foot"><span id="fch"></span><span id="fpct"></span></div>
+  <div id="foot"><span id="fch"></span></div>
 
   <header id="top" class="bar" hidden>
+    <button class="ib" id="btnLib" type="button" aria-label="Voltar para a biblioteca">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div id="btitle"></div>
     <button class="ib" id="btnToc" type="button" aria-label="Sumário">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
     </button>
-    <button class="ib" id="btnOpen" type="button" aria-label="Abrir outro arquivo">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-    </button>
-    <div id="btitle"></div>
     <button class="ib txt" id="btnAa" type="button" aria-label="Ajustes de leitura">Aa</button>
   </header>
 
@@ -255,10 +294,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
       </button>
     </header>
     <div id="toclist"></div>
-    <footer>
-      <button class="btn" id="tocOpen" type="button">Abrir outro livro</button>
-      <button class="btn" id="tocSample" type="button">Ver o exemplo de uso</button>
-    </footer>
   </aside>
 
   <section id="sheet" hidden aria-label="Ajustes de leitura">
@@ -300,6 +335,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     </div>
   </section>
 
+  <section id="bsheet" hidden aria-label="Opções do livro">
+    <h2 id="bsTitle"></h2>
+    <p>Remover tira o livro da biblioteca e libera o espaço guardado neste navegador. O arquivo original no seu aparelho não é apagado.</p>
+    <button class="btn primary" id="bsRemove" type="button">Remover da biblioteca</button>
+    <button class="btn" id="bsCancel" type="button">Cancelar</button>
+  </section>
+
   <div id="status" role="status" hidden></div>
   <div id="toast" role="status" hidden></div>
 </div>
@@ -313,6 +355,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
 const $ = (id) => document.getElementById(id);
 const app = $('app'), stage = $('stage'), page = $('page'), flow = $('flow');
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const PARSE_VER = 2;
 const FS = [15, 16.5, 18, 20, 22, 25, 28];
 const GAP = 48;
 
@@ -321,23 +364,47 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento */ } }
 };
-const idb = () => new Promise((res, rej) => {
-  const r = indexedDB.open('penumbra', 1);
-  r.onupgradeneeded = () => r.result.createObjectStore('books');
+let dbp = null;
+const getDb = () => dbp || (dbp = new Promise((res, rej) => {
+  const r = indexedDB.open('penumbra', 2);
+  r.onupgradeneeded = () => {
+    const db = r.result;
+    ['books', 'lib', 'files', 'parsed'].forEach((n) => { if (!db.objectStoreNames.contains(n)) db.createObjectStore(n); });
+  };
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
-});
-async function idbSet(k, v) {
+}));
+let warnedStore = false;
+async function idbPut(st, key, val) {
   try {
-    const db = await idb();
-    await new Promise((res, rej) => { const t = db.transaction('books', 'readwrite'); t.objectStore('books').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); });
+    const db = await getDb();
+    await new Promise((res, rej) => {
+      const t = db.transaction(st, 'readwrite'); t.objectStore(st).put(val, key);
+      t.oncomplete = res; t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+    });
+    return true;
+  } catch (e) {
+    if (!warnedStore) { warnedStore = true; notify('Não consegui guardar dados neste navegador. A biblioteca pode não ser lembrada.'); }
+    return false;
+  }
+}
+async function idbGet(st, key) {
+  try {
+    const db = await getDb();
+    return await new Promise((res, rej) => { const r = db.transaction(st).objectStore(st).get(key); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  } catch (e) { return undefined; }
+}
+async function idbDel(st, key) {
+  try {
+    const db = await getDb();
+    await new Promise((res, rej) => { const t = db.transaction(st, 'readwrite'); t.objectStore(st).delete(key); t.oncomplete = res; t.onerror = () => rej(t.error); });
   } catch (e) { /* sem armazenamento */ }
 }
-async function idbGet(k) {
+async function idbAll(st) {
   try {
-    const db = await idb();
-    return await new Promise((res, rej) => { const r = db.transaction('books').objectStore('books').get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-  } catch (e) { return undefined; }
+    const db = await getDb();
+    return await new Promise((res, rej) => { const r = db.transaction(st).objectStore(st).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  } catch (e) { return []; }
 }
 
 /* ---------- ajustes ---------- */
@@ -360,8 +427,7 @@ function syncControls() {
   $('bright').value = Math.round(S.bright * 100);
   $('warm').value = Math.round(S.warm * 100);
   document.querySelectorAll('[data-set]').forEach((b) => {
-    const k = b.dataset.set;
-    b.setAttribute('aria-pressed', String(S[k]) === b.dataset.v ? 'true' : 'false');
+    b.setAttribute('aria-pressed', String(S[b.dataset.set]) === b.dataset.v ? 'true' : 'false');
   });
 }
 let rlTimer = 0;
@@ -388,7 +454,7 @@ function notify(msg) {
 function status(msg) { const s = $('status'); s.textContent = msg || ''; s.hidden = !msg; }
 function fail(msg) { const e = new Error(msg); e.userMessage = msg; return e; }
 
-/* ---------- utilidades de texto ---------- */
+/* ---------- utilidades ---------- */
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const stripExt = (n) => n.replace(/\.[^.]+$/, '');
 const xml = (s) => new DOMParser().parseFromString(s, 'application/xml');
@@ -397,12 +463,30 @@ function resolvePath(base, rel) {
 }
 const mime = (p) => ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' }[(p.split('.').pop() || '').toLowerCase()] || 'application/octet-stream');
 const plainLen = (html) => html.replace(/<[^>]+>/g, '').length;
+function thumbFromBlob(blob, w) {
+  return new Promise((res) => {
+    const u = URL.createObjectURL(blob), img = new Image();
+    img.onload = () => {
+      let out = '';
+      try {
+        const sc = Math.min(1, (w || 240) / img.naturalWidth);
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.naturalWidth * sc)); c.height = Math.max(1, Math.round(img.naturalHeight * sc));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        out = c.toDataURL('image/jpeg', 0.8);
+      } catch (e) { out = ''; }
+      URL.revokeObjectURL(u); res(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); res(''); };
+    img.src = u;
+  });
+}
 
 /* ---------- blocos de texto -> capítulos (TXT, MD, HTML, DOCX, PDF) ---------- */
 function chaptersFromBlocks(blocks, name) {
   blocks = blocks.filter((b) => b.t && b.t.trim());
   const hasTop = blocks.filter((b) => b.h === 1).length >= 2;
-  let list = [], cur = null;
+  const list = []; let cur = null;
   const push = () => { if (cur && cur.blocks.length) list.push(cur); };
   for (const b of blocks) {
     if (hasTop && b.h === 1) { push(); cur = { title: b.t.slice(0, 80), blocks: [b] }; }
@@ -495,13 +579,97 @@ async function parseDocx(zip, name) {
   }
   const chapters = chaptersFromBlocks(blocks, stripExt(name));
   if (!chapters.length) throw fail('Não encontrei texto neste documento.');
-  let title = stripExt(name);
+  let title = stripExt(name), author = '';
   const core = zip.file('docProps/core.xml');
-  if (core) { const t = xml(await core.async('string')).getElementsByTagNameNS('*', 'title')[0]; if (t && t.textContent.trim()) title = t.textContent.trim(); }
-  return { title, chapters, lang: 'pt-BR' };
+  if (core) {
+    const d = xml(await core.async('string'));
+    const t = d.getElementsByTagNameNS('*', 'title')[0], a = d.getElementsByTagNameNS('*', 'creator')[0];
+    if (t && t.textContent.trim()) title = t.textContent.trim();
+    if (a && a.textContent.trim()) author = a.textContent.trim();
+  }
+  return { title, author, chapters, lang: 'pt-BR' };
 }
 
-/* ---------- PDF (texto corrido) ---------- */
+/* ---------- PDF: linhas -> parágrafos ---------- */
+/*PDFBLOCKS-START*/
+function pdfBlocks(pageLines) {
+  const TERM = /[.!?…:;)\]”»"']$/;
+  const LOWER = /^[a-zà-ÿ]/;
+  const DIALOG = /^[—–]\s?\S/;
+  const median = (a) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : 0; };
+  const modeOf = (arr) => {
+    const m = new Map(); arr.forEach(([k, w]) => m.set(k, (m.get(k) || 0) + w));
+    let best = null, bw = -1; m.forEach((w, k) => { if (w > bw) { bw = w; best = k; } });
+    return best;
+  };
+
+  // 1. Remove cabeçalhos e rodapés repetidos e números de página soltos.
+  const norm = (s) => s.replace(/\d+/g, '#').toLowerCase();
+  const counts = new Map();
+  const edges = (L) => [L[0], L[1], L[L.length - 2], L[L.length - 1]].filter(Boolean);
+  pageLines.forEach((L) => { new Set(edges(L).map((l) => norm(l.s))).forEach((k) => counts.set(k, (counts.get(k) || 0) + 1)); });
+  const need = Math.max(3, Math.ceil(pageLines.length * 0.25));
+  const repeated = new Set([...counts].filter(([, c]) => c >= need).map(([k]) => k));
+  pageLines = pageLines.map((L) => L.filter((l, i) => {
+    const isEdge = i < 2 || i >= L.length - 2;
+    if (/^\d{1,4}$/.test(l.s) && isEdge) return false;
+    return !(isEdge && repeated.has(norm(l.s)));
+  }));
+
+  // 2. Tamanho de fonte do corpo do texto.
+  const all = pageLines.flat();
+  const bodyH = modeOf(all.map((l) => [Math.round(l.h * 2) / 2, l.s.length])) || 12;
+
+  // 3. Monta parágrafos página a página.
+  const blocks = [];
+  pageLines.forEach((lines, pIdx) => {
+    const p = pIdx + 1;
+    if (!lines.length) return;
+    const body = lines.filter((l) => Math.abs(l.h - bodyH) <= bodyH * 0.15);
+    const ref = body.length ? body : lines;
+    const left = modeOf(ref.map((l) => [Math.round(l.x0 / 2) * 2, l.s.length]));
+    const xs = ref.map((l) => l.x1).sort((a, b) => a - b);
+    const right = xs[Math.floor(0.92 * (xs.length - 1))];
+    const gaps = [];
+    for (let i = 1; i < ref.length; i++) { const g = ref[i - 1].y - ref[i].y; if (g > 0 && g < bodyH * 3) gaps.push(g); }
+    const step = median(gaps) || bodyH * 1.3;
+
+    let para = null, first = true, lastHead = null;
+    const flush = () => {
+      if (!para) return;
+      const t = para.t, prev = blocks[blocks.length - 1];
+      if (first && prev && prev.h === 0 && !TERM.test(prev.t) && LOWER.test(t)) {
+        prev.t = prev.t.endsWith('-') ? prev.t.slice(0, -1) + t : prev.t + ' ' + t;
+      } else blocks.push({ t, h: 0, pg: p });
+      first = false; para = null;
+    };
+    lines.forEach((l) => {
+      if (l.h > bodyH * 1.18 && l.s.length < 120) {
+        flush(); first = false;
+        const lv = l.h > bodyH * 1.4 ? 1 : 2;
+        if (lastHead && lastHead.lv === lv && lastHead.y - l.y < l.h * 2.2) { lastHead.b.t += ' ' + l.s; lastHead.y = l.y; }
+        else { const b = { t: l.s, h: lv, pg: p }; blocks.push(b); lastHead = { b, y: l.y, lv }; }
+        return;
+      }
+      lastHead = null;
+      if (!para) { para = { t: l.s, last: l }; return; }
+      const prev = para.last, gap = prev.y - l.y;
+      const big = gap > step * 1.7;
+      const indent = l.x0 - left > bodyH * 0.8;
+      const short = (prev.x1 - left) < 0.7 * (right - left);
+      const brk = big || (TERM.test(prev.s) && (indent || short || DIALOG.test(l.s)));
+      if (brk) { flush(); para = { t: l.s, last: l }; }
+      else {
+        para.t = (para.t.endsWith('-') && LOWER.test(l.s)) ? para.t.slice(0, -1) + l.s : para.t + ' ' + l.s;
+        para.last = l;
+      }
+    });
+    flush();
+  });
+  return blocks;
+}
+/*PDFBLOCKS-END*/
+
 function loadScript(src) {
   return new Promise((res, rej) => {
     const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('script'));
@@ -516,53 +684,45 @@ async function parsePdf(buf, name) {
   let pdf;
   try { pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), useWorkerFetch: false, isEvalSupported: false }).promise; }
   catch (e) { console.error(e); throw fail('Não consegui abrir este PDF. Ele pode estar protegido por senha ou danificado.'); }
-  const blocks = [];
-  const median = (a) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : 0; };
+
+  const pageLines = [];
   for (let p = 1; p <= pdf.numPages; p++) {
-    status('Lendo PDF… página ' + p + ' de ' + pdf.numPages);
+    status('Lendo o PDF… página ' + p + ' de ' + pdf.numPages);
     const pg = await pdf.getPage(p);
     const tc = await pg.getTextContent();
-    const lines = []; let cur = null, prevEnd = 0;
+    const raw = []; let cur = null, prevEnd = 0;
     for (const it of tc.items) {
       if (!('str' in it)) continue;
-      const y = it.transform[5], x = it.transform[4], h = Math.abs(it.transform[3]) || it.height || 10;
-      if (cur && Math.abs(y - cur.y) < h * 0.5) {
-        if (x - prevEnd > h * 0.15 && !cur.s.endsWith(' ') && !it.str.startsWith(' ')) cur.s += ' ';
-        cur.s += it.str;
+      if (it.str === '') { if (it.hasEOL && cur) { raw.push(cur); cur = null; } continue; }
+      const x = it.transform[4], y = it.transform[5], h = Math.abs(it.transform[3]) || it.height || 10, w = it.width || 0;
+      if (cur && Math.abs(y - cur.y) < Math.max(2, cur.h * 0.45)) {
+        if (x - prevEnd > h * 0.2 && !cur.s.endsWith(' ') && !it.str.startsWith(' ')) cur.s += ' ';
+        cur.s += it.str; cur.x0 = Math.min(cur.x0, x); cur.x1 = Math.max(cur.x1, x + w); cur.h = Math.max(cur.h, h);
       } else {
-        if (cur) lines.push(cur);
-        cur = { y, s: it.str };
+        if (cur) raw.push(cur);
+        cur = { y, s: it.str, x0: x, x1: x + w, h };
       }
-      prevEnd = x + (it.width || 0);
-      if (it.hasEOL && cur) { lines.push(cur); cur = null; }
+      prevEnd = x + w;
+      if (it.hasEOL && cur) { raw.push(cur); cur = null; }
     }
-    if (cur) lines.push(cur);
-    const ls = lines.map((l) => ({ y: l.y, s: l.s.replace(/\s+/g, ' ').trim() })).filter((l) => l.s && !/^\d{1,4}$/.test(l.s));
-    const gaps = []; for (let i = 1; i < ls.length; i++) { const g = ls[i - 1].y - ls[i].y; if (g > 0) gaps.push(g); }
-    const med = median(gaps) || 12;
-    let para = '', first = true;
-    const flush = () => {
-      if (!para) return;
-      const prev = blocks[blocks.length - 1];
-      if (first && prev && !/[.!?…:"”»)]$/.test(prev.t) && /^[a-zà-ÿ]/.test(para)) {
-        prev.t = prev.t.endsWith('-') ? prev.t.slice(0, -1) + para : prev.t + ' ' + para;
-      } else blocks.push({ t: para, h: 0, pg: p });
-      para = ''; first = false;
-    };
-    ls.forEach((l, i) => {
-      const gap = i ? ls[i - 1].y - l.y : 0;
-      if (i && gap > med * 1.45) flush();
-      if (!para) para = l.s;
-      else if (para.endsWith('-') && /^[a-zà-ÿ]/.test(l.s)) para = para.slice(0, -1) + l.s;
-      else para += ' ' + l.s;
-    });
-    flush();
+    if (cur) raw.push(cur);
+    pageLines.push(raw.map((l) => ({ y: l.y, x0: l.x0, x1: l.x1, h: l.h, s: l.s.replace(/­/g, '').replace(/\s+/g, ' ').trim() })).filter((l) => l.s));
   }
+  const blocks = pdfBlocks(pageLines);
   const chars = blocks.reduce((s, b) => s + b.t.length, 0);
   if (chars < 40) throw fail('Este PDF parece ser digitalizado (só imagens) e não tem texto para extrair.');
-  let title = stripExt(name);
-  try { const meta = await pdf.getMetadata(); if (meta && meta.info && meta.info.Title && meta.info.Title.trim()) title = meta.info.Title.trim(); } catch (e) { /* sem metadados */ }
-  return { title, chapters: chaptersFromBlocks(blocks, title), lang: 'pt-BR' };
+
+  let title = stripExt(name), author = '', cover = '';
+  try { const meta = await pdf.getMetadata(); const i = (meta && meta.info) || {}; if (i.Title && i.Title.trim()) title = i.Title.trim(); if (i.Author && i.Author.trim()) author = i.Author.trim(); } catch (e) { /* sem metadados */ }
+  try {
+    const pg1 = await pdf.getPage(1);
+    const v0 = pg1.getViewport({ scale: 1 });
+    const vp = pg1.getViewport({ scale: 240 / v0.width });
+    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    await pg1.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    cover = c.toDataURL('image/jpeg', 0.8);
+  } catch (e) { cover = ''; }
+  return { title, author, cover, chapters: chaptersFromBlocks(blocks, title), lang: 'pt-BR' };
 }
 
 /* ---------- EPUB ---------- */
@@ -639,6 +799,15 @@ async function parseEpub(zip, name) {
     }
   }
 
+  let cover = '';
+  try {
+    let ci = items.find((m) => /cover-image/.test(m.props));
+    if (!ci) { const mc = opf.querySelector('meta[name="cover"]'); if (mc) ci = manifest[mc.getAttribute('content')]; }
+    if (ci && /^image\//.test(ci.type) && zip.file(ci.href)) {
+      cover = await thumbFromBlob(new Blob([await zip.file(ci.href).async('arraybuffer')], { type: ci.type }), 240);
+    }
+  } catch (e) { cover = ''; }
+
   const urls = [], cache = new Map(), chapters = [];
   let n = 0;
   for (const m of spine) {
@@ -650,28 +819,28 @@ async function parseEpub(zip, name) {
   }
   if (!chapters.length) throw fail('Não encontrei texto neste EPUB.');
   const lang = meta('language');
-  return { title: meta('title') || stripExt(name), author: meta('creator'), chapters, urls, lang: /^[a-z]{2,3}(-[A-Za-z0-9]+)*$/.test(lang) ? lang : 'pt-BR' };
+  return { title: meta('title') || stripExt(name), author: meta('creator'), cover, chapters, urls, lang: /^[a-z]{2,3}(-[A-Za-z0-9]+)*$/.test(lang) ? lang : 'pt-BR' };
 }
 
 /* ---------- despacho por formato ---------- */
 async function buildBook(buf, name, size) {
   const head = String.fromCharCode(...new Uint8Array(buf.slice(0, 4)));
   const ext = ((name.match(/\.([^.]+)$/) || [])[1] || '').toLowerCase();
-  let b;
-  if (head.startsWith('%PDF')) b = await parsePdf(buf, name);
+  let b, kind;
+  if (head.startsWith('%PDF')) { kind = 'pdf'; b = await parsePdf(buf, name); }
   else if (head.startsWith('PK')) {
     if (!window.JSZip) throw fail('Não consegui carregar o leitor de arquivos. Verifique a conexão e tente de novo.');
     let zip;
     try { zip = await window.JSZip.loadAsync(buf); } catch (e) { throw fail('Não consegui abrir este arquivo compactado.'); }
-    if (zip.file('META-INF/container.xml')) b = await parseEpub(zip, name);
-    else if (zip.file('word/document.xml')) b = await parseDocx(zip, name);
+    if (zip.file('META-INF/container.xml')) { kind = 'epub'; b = await parseEpub(zip, name); }
+    else if (zip.file('word/document.xml')) { kind = 'docx'; b = await parseDocx(zip, name); }
     else throw fail('Formato não reconhecido. Use EPUB, PDF, DOCX, TXT, HTML ou MD.');
   }
-  else if (['html', 'htm', 'xhtml'].includes(ext)) b = parseHtmlFile(buf, name);
-  else if (['md', 'markdown'].includes(ext)) b = parseMd(buf, name);
+  else if (['html', 'htm', 'xhtml'].includes(ext)) { kind = 'html'; b = parseHtmlFile(buf, name); }
+  else if (['md', 'markdown'].includes(ext)) { kind = 'md'; b = parseMd(buf, name); }
   else if (['mobi', 'azw', 'azw3', 'kfx', 'doc'].includes(ext)) throw fail('Este formato não é aceito. Converta para EPUB (se o arquivo não tiver DRM) e abra de novo.');
-  else b = parseTxt(buf, name);
-  b.id = name + ':' + size;
+  else { kind = 'txt'; b = parseTxt(buf, name); }
+  b.format = kind; b.id = name + ':' + size;
   return b;
 }
 
@@ -681,27 +850,27 @@ function sampleBook() {
     { title: 'Como ler aqui', html: '<h2>Como ler aqui</h2>' +
       '<p>Este é um livro de exemplo, escrito só para mostrar como o leitor funciona. Nada aqui precisa ser lido com atenção, mas vale passar as páginas para sentir o ritmo do texto.</p>' +
       '<p>Para avançar, toque na lateral direita da tela ou deslize o dedo para a esquerda. Para voltar, toque na lateral esquerda ou deslize para a direita. No computador, as setas do teclado, a barra de espaço e as teclas Page Up e Page Down fazem o mesmo.</p>' +
-      '<p>Um toque no centro da tela mostra as barras de controle. No alto ficam o botão do sumário, o botão para abrir outro arquivo e o botão Aa, que reúne os ajustes de leitura. Embaixo fica a barra de progresso, que você pode arrastar para ir a qualquer ponto do livro.</p>' +
-      '<p>No rodapé, sempre visível, aparecem o nome do capítulo e a porcentagem lida. A barra de baixo também informa quantos minutos faltam para terminar o capítulo.</p>' },
+      '<p>Um toque no centro da tela mostra as barras de controle. No alto ficam a seta para voltar à biblioteca, o botão do sumário e o botão Aa, que reúne os ajustes de leitura. Embaixo fica a barra de progresso, que você pode arrastar para ir a qualquer ponto do livro.</p>' +
+      '<p>O botão voltar do celular também leva você de volta à biblioteca, onde cada livro mostra a porcentagem já lida.</p>' },
     { title: 'Ajustes para a noite', html: '<h2>Ajustes para a noite</h2>' +
       '<p>O ajuste de brilho escurece a tela por cima de tudo, inclusive dos menus, e vai além do mínimo que o aparelho permite. Isso ajuda quando o brilho do próprio celular já está no nível mais baixo e ainda incomoda.</p>' +
       '<p>A luz quente acrescenta um tom âmbar ao conjunto e reduz o azul. Use pouco no início e aumente aos poucos, até que o branco da página deixe de chamar atenção.</p>' +
       '<p>Há três temas. O Papel tem fundo claro e é o mais parecido com uma página impressa. O Sépia é amarelado e mais suave. O Noturno tem fundo escuro e texto em cinza claro, sem branco puro. O modo Auto segue o tema do aparelho.</p>' +
       '<p>O tamanho da letra vai de pequeno a grande em sete passos, e as margens podem ser estreitas, médias ou largas. A fonte com serifa foi desenhada para leitura em tela. A sem serifa fica à disposição de quem prefere linhas mais limpas.</p>' +
-      '<p>Ao mudar qualquer ajuste, o leitor refaz as páginas e mantém você no mesmo ponto do texto.</p>' },
+      '<p>Ao mudar qualquer ajuste, o leitor refaz as páginas e mantém você no mesmo ponto do texto. Os ajustes também ficam disponíveis na tela da biblioteca.</p>' },
     { title: 'Seus livros', html: '<h2>Seus livros</h2>' +
       '<p>O leitor abre arquivos EPUB, PDF, DOCX, TXT, HTML e Markdown. Ele não abre livros protegidos por DRM e não baixa nada sozinho. Você escolhe o arquivo no seu aparelho e a leitura acontece inteira no navegador.</p>' +
       '<p>O PDF é convertido em texto corrido para caber bem na tela do celular. Por isso o layout original, as imagens e as tabelas se perdem, e um PDF digitalizado, feito só de imagens, não pode ser lido. Para livros, o EPUB costuma dar o melhor resultado.</p>' +
       '<p>Há boas fontes de livros livres de direitos autorais, como o portal Domínio Público, o Projeto Gutenberg e a Wikisource. Obras antigas, cujos direitos já expiraram, costumam estar disponíveis ali.</p>' +
-      '<p>O último livro aberto fica guardado neste navegador, junto com a página onde você parou. Na próxima visita, a leitura continua do mesmo ponto. Se os dados do navegador forem apagados, basta escolher o arquivo de novo.</p>' +
+      '<p>Os livros adicionados ficam guardados neste navegador, cada um com a página onde você parou. Se os dados do navegador forem apagados, basta adicionar o arquivo de novo.</p>' +
       '<p>Boa leitura.</p>' }
   ];
   chapters.forEach((c) => { c.len = plainLen(c.html); });
-  return { id: 'sample', title: 'Exemplo de uso', chapters, lang: 'pt-BR' };
+  return { id: 'sample', title: 'Exemplo de uso', chapters, lang: 'pt-BR', format: 'sample' };
 }
 
 /* ---------- paginação ---------- */
-let book = null, cum = [], total = 1, ch = 0, pages = 1, pi = 0, W = 0, H = 0, tok = 0;
+let book = null, curMeta = null, cum = [], total = 1, ch = 0, pages = 1, pi = 0, W = 0, H = 0, tok = 0;
 
 async function layout(target) {
   const my = ++tok;
@@ -726,20 +895,24 @@ async function showChapter(i, target) {
   flow.style.transform = 'none';
   await layout(target);
 }
-function relayout() { if (book) layout(pages ? pi / pages : 0); }
+function relayout() { if (book && app.dataset.state === 'reading') layout(pages ? pi / pages : 0); }
 
+let saveTimer = 0;
+function flushSave() { clearTimeout(saveTimer); if (curMeta) idbPut('lib', curMeta.id, curMeta); }
 function frac() { return (cum[ch] + (pi / pages) * book.chapters[ch].len) / total; }
 function render() {
   flow.style.transform = 'translate3d(' + (-pi * (W + GAP)) + 'px,0,0)';
   const c = book.chapters[ch];
   const pct = Math.min(100, Math.round(100 * (cum[ch] + ((pi + 1) / pages) * c.len) / total));
   $('fch').textContent = c.title;
-  $('fpct').textContent = pct + '%';
   $('bch').textContent = c.title;
   const rem = (1 - (pi + 1) / pages) * c.len, min = rem / 1000;
   $('bleft').textContent = rem <= 0 ? 'Fim do capítulo' : min < 1 ? 'Menos de 1 min no capítulo' : Math.round(min) + ' min restantes no capítulo';
   if (document.activeElement !== $('scrub')) $('scrub').value = String(Math.round(frac() * 1000));
-  store.set('penumbra:pos:' + book.id, { ch, f: pi / pages });
+  if (curMeta) {
+    curMeta.pos = { ch, f: pi / pages }; curMeta.pct = pct;
+    clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 600);
+  }
 }
 function next() {
   if (pi < pages - 1) { pi++; render(); }
@@ -750,68 +923,183 @@ function prev() {
   else if (ch > 0) showChapter(ch - 1, 'last');
 }
 
-/* ---------- abrir livros ---------- */
-async function startBook(b) {
-  if (book && book.urls) book.urls.forEach((u) => URL.revokeObjectURL(u));
-  book = b; cum = []; let t = 0;
-  b.chapters.forEach((c) => { cum.push(t); t += c.len; });
+/* ---------- navegação (botão voltar do celular) ---------- */
+let panelOpen = false, homeScroll = 0;
+function pushNav(v) { try { history.pushState({ v }, ''); } catch (e) { /* sem histórico */ } }
+const navV = () => { try { return history.state && history.state.v; } catch (e) { return null; } };
+function hideBars() { $('top').hidden = true; $('bottom').hidden = true; }
+function hidePanels() { ['sheet', 'toc', 'bsheet', 'scrim'].forEach((id) => { $(id).hidden = true; }); panelOpen = false; }
+function showPanel(el) {
+  hideBars(); hidePanels();
+  el.hidden = false; $('scrim').hidden = false; panelOpen = true;
+  pushNav('panel');
+}
+function closePanel() {
+  if (!panelOpen) return;
+  if (navV() === 'panel') { try { history.back(); return; } catch (e) { /* cai para o fechamento direto */ } }
+  hidePanels();
+}
+function enterReader() {
+  app.dataset.state = 'reading';
+  hideBars(); hidePanels();
+  if (navV() !== 'reader') pushNav('reader');
+}
+function leaveReader() {
+  flushSave();
+  app.dataset.state = 'home';
+  hideBars(); hidePanels();
+  renderShelf();
+  $('home').scrollTop = homeScroll;
+}
+function backToLibrary() {
+  if (navV() === 'reader') { try { history.back(); return; } catch (e) { /* segue */ } }
+  leaveReader();
+}
+window.addEventListener('popstate', (e) => {
+  const v = e.state && e.state.v;
+  if (v === 'panel') return;
+  hidePanels();
+  if (v === 'reader') {
+    if (book && app.dataset.state !== 'reading') { app.dataset.state = 'reading'; relayout(); }
+  } else if (app.dataset.state === 'reading') leaveReader();
+});
+
+/* ---------- biblioteca ---------- */
+let lib = [];
+const hueOf = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; };
+function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+
+function renderShelf() {
+  const shelf = $('shelf'); shelf.textContent = '';
+  const items = lib.slice().sort((a, b) => (b.opened || 0) - (a.opened || 0) || (b.added || 0) - (a.added || 0));
+  $('empty').hidden = items.length > 0;
+  items.forEach((m) => {
+    const card = el('article', 'card');
+    const open = el('button', 'open'); open.type = 'button'; open.setAttribute('aria-label', 'Abrir ' + m.title);
+    const cover = el('span', 'cover');
+    if (m.cover) cover.style.backgroundImage = 'url("' + m.cover + '")';
+    else {
+      cover.classList.add('gen'); cover.style.setProperty('--h', String(hueOf(m.title)));
+      cover.appendChild(el('span', 'gt', m.title)); cover.appendChild(el('span', 'ga', m.author || ''));
+    }
+    const pc = Math.max(0, Math.min(100, m.pct || 0));
+    const prog = el('span', 'prog'), meter = el('span', 'meter'), fill = document.createElement('i');
+    fill.style.width = pc + '%'; meter.appendChild(fill);
+    prog.appendChild(meter); prog.appendChild(el('span', 'pc', pc + '%'));
+    open.appendChild(cover); open.appendChild(el('span', 'ct', m.title));
+    if (m.author) open.appendChild(el('span', 'ca', m.author));
+    open.appendChild(prog);
+    open.addEventListener('click', () => { homeScroll = $('home').scrollTop; openFromLibrary(m.id); });
+    const more = el('button', 'more'); more.type = 'button'; more.setAttribute('aria-label', 'Opções de ' + m.title);
+    more.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
+    more.addEventListener('click', () => openBookMenu(m));
+    card.appendChild(open); card.appendChild(more);
+    shelf.appendChild(card);
+  });
+}
+let menuId = null;
+function openBookMenu(m) { menuId = m.id; $('bsTitle').textContent = m.title; showPanel($('bsheet')); }
+$('bsCancel').addEventListener('click', closePanel);
+$('bsRemove').addEventListener('click', async () => {
+  const id = menuId; closePanel();
+  lib = lib.filter((m) => m.id !== id);
+  renderShelf();
+  await Promise.all(['lib', 'files', 'parsed'].map((st) => idbDel(st, id)));
+  notify('Livro removido da biblioteca.');
+});
+
+async function addBook(buf, name, size) {
+  const b = await buildBook(buf, name, size);
+  const old = lib.find((m) => m.id === b.id);
+  const meta = {
+    id: b.id, name, size, title: b.title, author: b.author || '', cover: b.cover || '', format: b.format,
+    added: old ? old.added : Date.now(), opened: old ? old.opened : 0, pct: old ? (old.pct || 0) : 0, pos: old ? old.pos : { ch: 0, f: 0 }
+  };
+  if (old) lib[lib.indexOf(old)] = meta; else lib.push(meta);
+  await idbPut('lib', meta.id, meta);
+  await idbPut('files', meta.id, { buf });
+  if (b.format !== 'epub') await idbPut('parsed', meta.id, { ver: PARSE_VER, book: { title: b.title, chapters: b.chapters, lang: b.lang } });
+  return { meta, book: b };
+}
+async function addFiles(files) {
+  const added = [];
+  try {
+    for (const f of files) {
+      status('Adicionando ' + f.name + '…');
+      try { added.push(await addBook(await f.arrayBuffer(), f.name, f.size)); }
+      catch (e) { console.error(e); notify((e && e.userMessage) || ('Não consegui abrir ' + f.name + '.')); }
+    }
+  } finally { status(''); }
+  renderShelf();
+  if (added.length === 1) { homeScroll = $('home').scrollTop; await startBook(added[0].book, added[0].meta); }
+  else added.forEach((a) => { if (a.book.urls) a.book.urls.forEach((u) => URL.revokeObjectURL(u)); });
+}
+async function openFromLibrary(id) {
+  const meta = lib.find((m) => m.id === id);
+  if (!meta) return;
+  status('Abrindo…');
+  try {
+    let b = null;
+    if (meta.format !== 'epub') {
+      const p = await idbGet('parsed', id);
+      if (p && p.ver === PARSE_VER) b = { id, format: meta.format, title: p.book.title, chapters: p.book.chapters, lang: p.book.lang };
+    }
+    if (!b) {
+      const f = await idbGet('files', id);
+      if (!f || !f.buf) throw fail('Não encontrei o arquivo deste livro. Remova e adicione de novo.');
+      b = await buildBook(f.buf, meta.name, meta.size);
+      if (meta.format !== 'epub') idbPut('parsed', id, { ver: PARSE_VER, book: { title: b.title, chapters: b.chapters, lang: b.lang } });
+    }
+    await startBook(b, meta);
+  } catch (e) {
+    console.error(e); notify((e && e.userMessage) || 'Não consegui abrir este livro.');
+  } finally { status(''); }
+}
+async function startBook(b, meta) {
+  if (book && book !== b && book.urls) book.urls.forEach((u) => URL.revokeObjectURL(u));
+  book = b; curMeta = meta || null; cum = [];
+  let t = 0; b.chapters.forEach((c) => { cum.push(t); t += c.len; });
   total = Math.max(1, t);
   page.lang = b.lang || 'pt-BR';
   $('btitle').textContent = b.title;
-  app.dataset.state = 'reading';
-  hideUI();
+  if (curMeta) { curMeta.opened = Date.now(); idbPut('lib', curMeta.id, curMeta); }
+  enterReader();
   buildToc();
-  const pos = store.get('penumbra:pos:' + b.id, { ch: 0, f: 0 });
+  const pos = (curMeta && curMeta.pos) || { ch: 0, f: 0 };
   await showChapter(Math.min(Math.max(0, pos.ch | 0), b.chapters.length - 1), pos.f || 0);
 }
-async function openBuffer(buf, name, size, persist) {
-  status('Abrindo livro…');
-  try {
-    const b = await buildBook(buf, name, size);
-    await startBook(b);
-    if (persist) idbSet('last', { name, size, buf });
-  } catch (e) {
-    console.error(e);
-    notify(e && e.userMessage ? e.userMessage : 'Não consegui abrir este arquivo.');
-  } finally { status(''); }
-}
-async function openFile(file) { await openBuffer(await file.arrayBuffer(), file.name, file.size, true); }
-$('file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) openFile(f); e.target.value = ''; });
-$('btnOpen').addEventListener('click', () => $('file').click());
-$('tocOpen').addEventListener('click', () => $('file').click());
-$('sampleBtn').addEventListener('click', () => startBook(sampleBook()));
-$('tocSample').addEventListener('click', () => startBook(sampleBook()));
+$('file').addEventListener('change', (e) => { const fl = [...(e.target.files || [])]; e.target.value = ''; if (fl.length) addFiles(fl); });
+$('sampleBtn').addEventListener('click', () => { homeScroll = $('home').scrollTop; startBook(sampleBook(), null); });
+$('homeSettings').addEventListener('click', () => showPanel($('sheet')));
 window.addEventListener('dragover', (e) => { e.preventDefault(); document.body.classList.add('drag'); });
 window.addEventListener('dragleave', () => document.body.classList.remove('drag'));
 window.addEventListener('drop', (e) => {
   e.preventDefault(); document.body.classList.remove('drag');
-  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (f) openFile(f);
+  const fl = [...((e.dataTransfer && e.dataTransfer.files) || [])];
+  if (fl.length) addFiles(fl);
 });
 
-/* ---------- barras, sumário e ajustes ---------- */
+/* ---------- barras e sumário ---------- */
 function buildToc() {
   const list = $('toclist'); list.textContent = '';
   book.chapters.forEach((c, i) => {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = c.title; b.dataset.i = String(i);
-    b.addEventListener('click', () => { hideUI(); showChapter(i, 0); });
+    const b = el('button', null, c.title); b.type = 'button'; b.dataset.i = String(i);
+    b.addEventListener('click', () => { closePanel(); showChapter(i, 0); });
     list.appendChild(b);
   });
 }
-const uiOpen = () => !$('top').hidden || !$('sheet').hidden || !$('toc').hidden;
-function hideUI() { ['top', 'bottom', 'sheet', 'toc', 'scrim'].forEach((id) => { $(id).hidden = true; }); }
-function showBars() { $('top').hidden = false; $('bottom').hidden = false; }
+const uiOpen = () => panelOpen || !$('top').hidden;
 function openToc() {
-  hideUI(); $('toc').hidden = false; $('scrim').hidden = false;
+  showPanel($('toc'));
   const cur = $('toclist').querySelector('[data-i="' + ch + '"]');
   $('toclist').querySelectorAll('button').forEach((b) => b.setAttribute('aria-current', b === cur ? 'true' : 'false'));
   if (cur) cur.scrollIntoView({ block: 'center' });
 }
-function openSheet() { hideUI(); $('sheet').hidden = false; $('scrim').hidden = false; }
+$('btnLib').addEventListener('click', backToLibrary);
 $('btnToc').addEventListener('click', openToc);
-$('btnAa').addEventListener('click', openSheet);
-$('tocClose').addEventListener('click', hideUI);
-$('scrim').addEventListener('click', hideUI);
+$('btnAa').addEventListener('click', () => showPanel($('sheet')));
+$('tocClose').addEventListener('click', closePanel);
+$('scrim').addEventListener('click', closePanel);
 
 $('scrub').addEventListener('change', (e) => {
   const f = +e.target.value / 1000 * total;
@@ -836,28 +1124,38 @@ stage.addEventListener('pointerup', (e) => {
   if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) next(); else prev(); return; }
   if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return;
   if (String(window.getSelection && window.getSelection()).length) return;
-  if (uiOpen()) { hideUI(); return; }
+  if (panelOpen) { closePanel(); return; }
+  if (!$('top').hidden) { hideBars(); return; }
   const r = stage.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
-  if (x < 0.3) prev(); else if (x > 0.7) next(); else showBars();
+  if (x < 0.3) prev(); else if (x > 0.7) next(); else { $('top').hidden = false; $('bottom').hidden = false; }
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { if (panelOpen) closePanel(); else if (app.dataset.state === 'reading') { if (uiOpen()) hideBars(); else backToLibrary(); } return; }
   if (app.dataset.state !== 'reading') return;
-  if (e.key === 'Escape') { hideUI(); return; }
   if (e.target && e.target.matches && e.target.matches('input')) return;
   if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); next(); }
   else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
 });
 window.addEventListener('resize', schedRelayout);
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+window.addEventListener('pagehide', flushSave);
 if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', schedRelayout);
 
 /* ---------- início ---------- */
+async function boot() {
+  lib = await idbAll('lib');
+  const legacy = await idbGet('books', 'last');
+  if (legacy && legacy.buf) {
+    try { status('Atualizando a biblioteca…'); await addBook(legacy.buf, legacy.name, legacy.size); } catch (e) { console.error(e); }
+    await idbDel('books', 'last'); status('');
+  }
+  renderShelf();
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* opcional */ }
 applySettings(); syncControls();
-(async () => {
-  const last = await idbGet('last');
-  if (last && last.buf) await openBuffer(last.buf, last.name, last.size, false);
-})();
+try { history.replaceState({ v: 'home' }, ''); } catch (e) { /* sem histórico */ }
+boot();
 })();
 </script>
 </body>

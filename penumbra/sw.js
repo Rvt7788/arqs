@@ -1,6 +1,6 @@
 /* Penumbra: service worker. Guarda o app para uso offline.
    Suba a versão abaixo sempre que alterar qualquer arquivo do app. */
-const VERSION = 'penumbra-v1';
+const VERSION = 'penumbra-v2';
 const SHELL = [
   './',
   'index.html',
@@ -47,9 +47,11 @@ self.addEventListener('fetch', (event) => {
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(VERSION);
-      const cached = (await cache.match('index.html')) || (await cache.match('./'));
-      const fresh = fetch(req).then((r) => { if (r && r.ok) cache.put('index.html', r.clone()); return r; }).catch(() => null);
-      return cached || (await fresh) || Response.error();
+      try {
+        const r = await fetch(req);
+        if (r && r.ok) { cache.put('index.html', r.clone()); return r; }
+      } catch (e) { /* offline */ }
+      return (await cache.match('index.html')) || (await cache.match('./')) || Response.error();
     })());
     return;
   }
