@@ -177,6 +177,9 @@ body.drag #home { outline: 2px dashed var(--accent); outline-offset: -10px; }
 #flow table { max-width: 100%; border-collapse: collapse; font-size: 0.9em; }
 #flow td, #flow th { padding: 0.2em 0.5em; border: 1px solid var(--line); }
 #flow a { color: inherit; }
+#flow p.note { font-size: 0.8em; line-height: 1.45; text-indent: 0; text-align: left; margin: 0.7em 0; color: var(--muted); }
+#flow p.sep { text-align: center; text-indent: 0; margin: 1.1em 0; letter-spacing: 0.4em; color: var(--muted); }
+#flow p.sep + p { text-indent: 0; }
 
 #pdfview { position: absolute; inset: 0; overflow: hidden; background: var(--bg); }
 #leaf { position: absolute; left: 0; top: 0; display: flex; align-items: center; background: var(--bg); transform-origin: 0 0; will-change: transform; }
@@ -297,6 +300,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     <button class="ib" id="btnToc" type="button" aria-label="Sumário">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg>
     </button>
+    <button class="ib" id="btnMode" type="button" aria-label="Ler como texto corrido" hidden></button>
     <button class="ib" id="btnFs" type="button" aria-label="Tela cheia"></button>
     <button class="ib txt" id="btnAa" type="button" aria-label="Ajustes de leitura">Aa</button>
   </header>
@@ -330,9 +334,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
         <span class="lab">Modo de leitura</span>
         <div class="seg">
           <button type="button" data-book="mode" data-v="page">Página original</button>
-          <button type="button" data-book="mode" data-v="text">Texto</button>
+          <button type="button" data-book="mode" data-v="text">Texto corrido</button>
         </div>
-        <p class="hint">O modo Texto ajusta as letras à tela, mas pode desorganizar livros com colunas, tabelas ou notas.</p>
+        <p class="hint">O texto corrido refaz as linhas para caber na tela, como no Kindle. Tabelas, imagens e fórmulas ficam melhores na página original. Você também troca pelo botão no topo da leitura.</p>
       </div>
     </div>
     <div class="group">
@@ -379,6 +383,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     </div>
     <div class="group" id="gPdf">
       <h3>PDF</h3>
+      <div class="row">
+        <span class="lab">Abrir PDFs em</span>
+        <div class="seg">
+          <button type="button" data-set="pdfMode" data-v="page">Página original</button>
+          <button type="button" data-set="pdfMode" data-v="text">Texto corrido</button>
+        </div>
+      </div>
       <div class="row">
         <span class="lab">Encaixe</span>
         <div class="seg">
@@ -448,7 +459,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
 const $ = (id) => document.getElementById(id);
 const app = $('app'), stage = $('stage'), pageEl = $('page'), flow = $('flow'), pdfview = $('pdfview'), leaf = $('leaf');
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
-const PARSE_VER = 3;
+const PARSE_VER = 4;
 const FS = [15, 16.5, 18, 20, 22, 25, 28];
 const GAP = 48;
 const ALL_EDGES = { left: true, right: true, top: true, bottom: true };
@@ -512,7 +523,7 @@ function status(msg) { const s = $('status'); s.textContent = msg || ''; s.hidde
 function fail(msg) { const e = new Error(msg); e.userMessage = msg; return e; }
 
 /* ================= ajustes ================= */
-const DEF = { fs: 2, font: 'serif', theme: 'auto', bright: 0.85, warm: 0, margin: 1, fit: 'page', crop: true, spread: false, fsAuto: true, orient: 'auto', wake: true };
+const DEF = { fs: 2, font: 'serif', theme: 'auto', bright: 0.85, warm: 0, margin: 1, fit: 'page', crop: true, spread: false, fsAuto: true, orient: 'auto', wake: true, pdfMode: 'page' };
 const S = Object.assign({}, DEF, store.get('penumbra:settings', {}));
 const RELAYOUT = new Set(['fs', 'font', 'margin', 'fit', 'crop', 'spread']);
 const parseV = (v) => (v === 'true' ? true : v === 'false' ? false : /^\d+$/.test(v) ? +v : v);
@@ -535,7 +546,7 @@ function syncControls() {
   document.querySelectorAll('[data-set]').forEach((b) => {
     b.setAttribute('aria-pressed', String(S[b.dataset.set]) === b.dataset.v ? 'true' : 'false');
   });
-  const mode = curMeta && curMeta.format === 'pdf' ? (curMeta.mode || 'page') : '';
+  const mode = curMeta && curMeta.format === 'pdf' ? (curMeta.mode || S.pdfMode) : '';
   document.querySelectorAll('[data-book="mode"]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === mode ? 'true' : 'false'));
 }
 let rlTimer = 0;
@@ -589,8 +600,41 @@ function thumbFromBlob(blob, w) {
 }
 
 /* ================= texto -> capítulos ================= */
+function renderBlocks(blocks) {
+  let lastPg = 0;
+  return blocks.map((b) => {
+    let a = '';
+    if (b.pg && b.pg !== lastPg) { a = ' data-pg="' + b.pg + '"'; lastPg = b.pg; }
+    if (b.kind === 'sep') return '<p class="sep"' + a + '>* * *</p>';
+    if (b.kind === 'note') return '<p class="note"' + a + '>' + esc(b.t) + '</p>';
+    if (b.h === 1) return '<h2' + a + '>' + esc(b.t) + '</h2>';
+    if (b.h) return '<h3' + a + '>' + esc(b.t) + '</h3>';
+    return '<p' + a + '>' + esc(b.t) + '</p>';
+  }).join('');
+}
+// Capítulos pelo sumário do próprio PDF (quando existe).
+function chaptersFromOutline(blocks, outline, name) {
+  if (!outline || !outline.length) return null;
+  const minD = Math.min(...outline.map((o) => o.depth));
+  let marks = outline.filter((o) => o.depth === minD);
+  if (marks.length < 2) marks = outline.filter((o) => o.depth <= minD + 1);
+  const seen = new Set();
+  marks = marks.slice().sort((a, b) => a.p - b.p).filter((o) => !seen.has(o.p) && seen.add(o.p));
+  if (marks.length < 2) return null;
+  blocks = blocks.filter((b) => b.kind === 'sep' || (b.t && b.t.trim()));
+  const list = []; let i = -1, cur = { title: 'Início', blocks: [] };
+  for (const b of blocks) {
+    while (i + 1 < marks.length && (b.pg || 0) >= marks[i + 1].p) {
+      if (cur.blocks.length) list.push(cur);
+      i++; cur = { title: marks[i].title.slice(0, 80), blocks: [] };
+    }
+    cur.blocks.push(b);
+  }
+  if (cur.blocks.length) list.push(cur);
+  return finishChapters(list, true, name);
+}
 function chaptersFromBlocks(blocks, name) {
-  blocks = blocks.filter((b) => b.t && b.t.trim());
+  blocks = blocks.filter((b) => b.kind === 'sep' || (b.t && b.t.trim()));
   const hasTop = blocks.filter((b) => b.h === 1).length >= 2;
   const list = []; let cur = null;
   const push = () => { if (cur && cur.blocks.length) list.push(cur); };
@@ -599,6 +643,9 @@ function chaptersFromBlocks(blocks, name) {
     else { if (!cur) cur = { title: hasTop ? 'Início' : name, blocks: [] }; cur.blocks.push(b); }
   }
   push();
+  return finishChapters(list, hasTop, name);
+}
+function finishChapters(list, titled, name) {
   const out = [];
   for (const c of list) {
     const len = c.blocks.reduce((s, b) => s + b.t.length, 0);
@@ -610,14 +657,14 @@ function chaptersFromBlocks(blocks, name) {
     }
     if (part.length) out.push({ title: idx === 1 ? c.title : c.title + ' (' + idx + ')', blocks: part });
   }
-  if (!hasTop && out.length > 1) {
+  if (!titled && out.length > 1) {
     out.forEach((c, i) => {
       const pg = c.blocks.find((b) => b.pg);
       c.title = 'Parte ' + (i + 1) + (pg ? ' · p. ' + pg.pg : '');
     });
   }
   return out.map((c) => {
-    const html = c.blocks.map((b) => b.h === 1 ? '<h2>' + esc(b.t) + '</h2>' : b.h ? '<h3>' + esc(b.t) + '</h3>' : '<p>' + esc(b.t) + '</p>').join('');
+    const html = renderBlocks(c.blocks);
     const first = c.blocks.find((b) => b.pg);
     return { title: c.title, html, pg: first ? first.pg : 0, len: Math.max(1, c.blocks.reduce((s, b) => s + b.t.length, 0)) };
   });
@@ -836,106 +883,272 @@ async function pdfInfo(doc, name) {
 }
 
 /* ================= PDF: modo Texto (linhas -> parágrafos) ================= */
-/*PDFBLOCKS-START*/
-function pdfBlocks(pageLines) {
-  const TERM = /[.!?…:;)\]”»"']$/;
+/*REFLOW-START*/
+/* Reconstrói o texto corrido de um PDF: itens do pdf.js -> linhas -> parágrafos. */
+const Reflow = (() => {
+  const TERM = /[.!?…:;)\]”»"'’]$/;
   const LOWER = /^[a-zà-ÿ]/;
-  const DIALOG = /^[—–]\s?\S/;
+  const DIALOG = /^([—–]\s?|-\s)\S/;
+  const HYPH = /[-­¬]$/;
+  const SEP = /^(?=.*[*·•#~=◆◇❧✦⁂])[\s*·•#~=_◆◇❧✦⁂—–-]{1,20}$/;
+  const CHAP = /^(cap[ií]tulo|chapter|parte|part|livro|book|pr[óo]logo|ep[ií]logo|pref[áa]cio|introdu[çc][ãa]o|conclus[ãa]o|ap[êe]ndice|posf[áa]cio)\b/i;
+  const ROMAN = /^[IVXLC]{1,7}\.?$/;
+  const PAGE_NUM = /^(p[áa]g(ina)?\.?\s*)?[-–—]?\s*(\d{1,4}|[ivxlcdm]{1,7})\s*[-–—]?$/i;
   const median = (a) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : 0; };
-  const modeOf = (arr) => {
-    const m = new Map(); arr.forEach(([k, w]) => m.set(k, (m.get(k) || 0) + w));
-    let best = null, bw = -1; m.forEach((w, k) => { if (w > bw) { bw = w; best = k; } });
+  const pct = (a, q) => { const b = a.slice().sort((x, y) => x - y); return b.length ? b[Math.min(b.length - 1, Math.floor(q * b.length))] : 0; };
+  const wmode = (pairs) => {
+    const m = new Map(); pairs.forEach(([k, w]) => m.set(k, (m.get(k) || 0) + w));
+    let best = 0, bw = -1; m.forEach((w, k) => { if (w > bw) { bw = w; best = k; } });
     return best;
   };
-  const norm = (s) => s.replace(/\d+/g, '#').toLowerCase();
-  const counts = new Map();
-  const edges = (L) => [L[0], L[1], L[L.length - 2], L[L.length - 1]].filter(Boolean);
-  pageLines.forEach((L) => { new Set(edges(L).map((l) => norm(l.s))).forEach((k) => counts.set(k, (counts.get(k) || 0) + 1)); });
-  const need = Math.max(3, Math.ceil(pageLines.length * 0.25));
-  const repeated = new Set([...counts].filter(([, c]) => c >= need).map(([k]) => k));
-  pageLines = pageLines.map((L) => L.filter((l, i) => {
-    const isEdge = i < 2 || i >= L.length - 2;
-    if (/^\d{1,4}$/.test(l.s) && isEdge) return false;
-    return !(isEdge && repeated.has(norm(l.s)));
-  }));
-  const all = pageLines.flat();
-  const bodyH = modeOf(all.map((l) => [Math.round(l.h * 2) / 2, l.s.length])) || 12;
-  const blocks = [];
-  pageLines.forEach((lines, pIdx) => {
-    const p = pIdx + 1;
-    if (!lines.length) return;
-    const body = lines.filter((l) => Math.abs(l.h - bodyH) <= bodyH * 0.15);
-    const ref = body.length ? body : lines;
-    const left = modeOf(ref.map((l) => [Math.round(l.x0 / 2) * 2, l.s.length]));
-    const xs = ref.map((l) => l.x1).sort((a, b) => a - b);
-    const right = xs[Math.floor(0.92 * (xs.length - 1))];
-    const gaps = [];
-    for (let i = 1; i < ref.length; i++) { const g = ref[i - 1].y - ref[i].y; if (g > 0 && g < bodyH * 3) gaps.push(g); }
-    const step = median(gaps) || bodyH * 1.3;
-    let para = null, first = true, lastHead = null;
-    const flush = () => {
-      if (!para) return;
-      const t = para.t, prev = blocks[blocks.length - 1];
-      if (first && prev && prev.h === 0 && !TERM.test(prev.t) && LOWER.test(t)) {
-        prev.t = prev.t.endsWith('-') ? prev.t.slice(0, -1) + t : prev.t + ' ' + t;
-      } else blocks.push({ t, h: 0, pg: p });
-      first = false; para = null;
-    };
-    lines.forEach((l) => {
-      if (l.h > bodyH * 1.18 && l.s.length < 120) {
-        flush(); first = false;
-        const lv = l.h > bodyH * 1.4 ? 1 : 2;
-        if (lastHead && lastHead.lv === lv && lastHead.y - l.y < l.h * 2.2) { lastHead.b.t += ' ' + l.s; lastHead.y = l.y; }
-        else { const b = { t: l.s, h: lv, pg: p }; blocks.push(b); lastHead = { b, y: l.y, lv }; }
-        return;
+  const isCaps = (s) => { const l = s.replace(/[^\p{L}]/gu, ''); return l.length >= 3 && l === l.toUpperCase() && l !== l.toLowerCase(); };
+
+  /* ---------- itens -> linhas, em ordem de leitura ---------- */
+  function linesFromItems(items, pageW, pageX0) {
+    pageX0 = pageX0 || 0;
+    const its = [];
+    for (const it of items) {
+      if (!it || typeof it.str !== 'string') continue;
+      const t = it.transform || [1, 0, 0, 1, 0, 0];
+      if (Math.abs(t[1]) > 0.01 || Math.abs(t[2]) > 0.01) continue; // texto girado (margens, carimbos)
+      const s = it.str.replace(/ /g, ' ');
+      if (!s.trim()) continue;
+      const h = Math.abs(t[3]) || it.height || 10;
+      its.push({ s, x: t[4], y: t[5], h, w: it.width || s.length * h * 0.5 });
+    }
+    if (!its.length) return [];
+    its.sort((a, b) => b.y - a.y || a.x - b.x);
+
+    // agrupa por linha de base; capitular (letra gigante) fica sozinha
+    const rows = [];
+    for (const it of its) {
+      const big = it.s.trim().length <= 2 && rows.length && it.h > 1.6 * rows[rows.length - 1].h;
+      const r = rows.length ? rows[rows.length - 1] : null;
+      if (r && !big && !r.cap && Math.abs(it.y - r.y) <= 0.45 * Math.max(r.h, it.h)) {
+        r.items.push(it);
+        if (it.h > r.h) { r.h = it.h; r.y = it.y; }
+      } else rows.push({ y: it.y, h: it.h, items: [it], cap: big });
+    }
+    for (const r of rows) {
+      r.items.sort((a, b) => a.x - b.x);
+      // remove chamadas de nota sobrescritas (números pequenos acima da linha)
+      if (r.items.length > 1) r.items = r.items.filter((it) => !(it.h < 0.8 * r.h && it.y > r.y + 0.15 * r.h && /^[\d*†‡]{1,3}$/.test(it.s.trim())));
+      r.gaps = [];
+      for (let i = 1; i < r.items.length; i++) {
+        const a = r.items[i - 1], b = r.items[i];
+        if (b.x - (a.x + a.w) > 1.2 * r.h) r.gaps.push([a.x + a.w, b.x]);
       }
-      lastHead = null;
-      if (!para) { para = { t: l.s, last: l }; return; }
-      const prev = para.last, gap = prev.y - l.y;
-      const big = gap > step * 1.7;
-      const indent = l.x0 - left > bodyH * 0.8;
-      const short = (prev.x1 - left) < 0.7 * (right - left);
-      const brk = big || (TERM.test(prev.s) && (indent || short || DIALOG.test(l.s)));
-      if (brk) { flush(); para = { t: l.s, last: l }; }
-      else {
-        para.t = (para.t.endsWith('-') && LOWER.test(l.s)) ? para.t.slice(0, -1) + l.s : para.t + ' ' + l.s;
-        para.last = l;
+    }
+
+    // calha entre colunas: posição x vazia em muitas linhas
+    // (trechos de cada linha separados por vãos grandes; a calha é a faixa que quase nenhum trecho cruza)
+    let gutter = null;
+    const spans = [];
+    for (const r of rows) {
+      let a = r.items[0].x, b = a + r.items[0].w;
+      for (let i = 1; i < r.items.length; i++) {
+        const it = r.items[i];
+        if (it.x - b > 1.2 * r.h) { spans.push([a, b]); a = it.x; }
+        b = Math.max(b, it.x + it.w);
+      }
+      spans.push([a, b]);
+    }
+    const textual = spans.filter(([a, b]) => b - a > pageW * 0.12);
+    if (textual.length >= 8) {
+      let best = Infinity, bx = 0;
+      for (let x = pageX0 + pageW * 0.3; x <= pageX0 + pageW * 0.7; x += 2) {
+        const c = textual.filter(([a, b]) => a < x && b > x).length;
+        if (c < best || (c === best && Math.abs(x - pageX0 - pageW / 2) < Math.abs(bx - pageX0 - pageW / 2))) { best = c; bx = x; }
+      }
+      const leftN = textual.filter(([, b]) => b <= bx).length, rightN = textual.filter(([a]) => a >= bx).length;
+      if (best <= textual.length * 0.08 && leftN >= textual.length * 0.25 && rightN >= textual.length * 0.25) gutter = bx;
+    }
+
+    const mk = (items, y, col) => {
+      let s = '', prev = null, hb = items[0].h, lb = 0;
+      for (const it of items) {
+        if (prev) {
+          const gap = it.x - (prev.x + prev.w);
+          if (gap > 0.15 * Math.min(it.h, prev.h) && !s.endsWith(' ') && !it.s.startsWith(' ')) s += ' ';
+        }
+        s += it.s; prev = it;
+        if (it.s.length > lb) { lb = it.s.length; hb = it.h; }
+      }
+      const last = items[items.length - 1];
+      return { y, x0: items[0].x, x1: last.x + last.w, h: hb, s: s.replace(/\u00AD(?=\S)/g, '').replace(/\s+/g, ' ').trim(), col };
+    };
+    if (gutter == null) return rows.map((r) => mk(r.items, r.y, 0)).filter((l) => l.s);
+
+    // duas colunas: em cada faixa, coluna esquerda inteira e depois a direita
+    const out = []; let L = [], R = [];
+    const flush = () => { out.push(...L, ...R); L = []; R = []; };
+    for (const r of rows) {
+      const crosses = r.items.some((it) => it.x < gutter - 1 && it.x + it.w > gutter + 1);
+      const left = r.items.filter((it) => it.x + it.w / 2 < gutter), right = r.items.filter((it) => it.x + it.w / 2 >= gutter);
+      const gapAt = r.gaps.some(([a, b]) => a < gutter && b > gutter);
+      if (crosses || (left.length && right.length && !gapAt)) { flush(); out.push(mk(r.items, r.y, 2)); continue; }
+      if (left.length) L.push(mk(left, r.y, 0));
+      if (right.length) R.push(mk(right, r.y, 1));
+    }
+    flush();
+    return out.filter((l) => l.s);
+  }
+
+  /* ---------- linhas -> blocos (parágrafos, títulos, notas, separadores) ---------- */
+  function blocks(pages) {
+    const allLines = pages.flatMap((p) => p.lines);
+    if (!allLines.length) return [];
+    const bodyH = wmode(allLines.map((l) => [Math.round(l.h * 2) / 2, l.s.length])) || 10;
+    const isBody = (l) => Math.abs(l.h - bodyH) <= bodyH * 0.12;
+
+    // cabeçalhos e rodapés que se repetem, e números de página
+    const norm = (s) => s.replace(/\d+/g, '#').replace(/\s+/g, ' ').trim().toLowerCase();
+    const edgeSets = pages.map((p) => {
+      const ys = [...new Set(p.lines.map((l) => l.y))].sort((a, b) => b - a);
+      const top = new Set(ys.slice(0, 2)), bot = new Set(ys.slice(-2));
+      return new Set(p.lines.filter((l) => top.has(l.y) || bot.has(l.y)));
+    });
+    const counts = new Map();
+    pages.forEach((p, i) => { new Set([...edgeSets[i]].map((l) => norm(l.s))).forEach((k) => counts.set(k, (counts.get(k) || 0) + 1)); });
+    const need = Math.max(3, Math.ceil(pages.length * 0.25));
+    const drop = (l, i) => edgeSets[i].has(l) && l.h <= bodyH * 1.15 && (PAGE_NUM.test(l.s) || ((counts.get(norm(l.s)) || 0) >= need && l.s.length < 100));
+    pages = pages.map((p, i) => ({ w: p.w, h: p.h, lines: p.lines.filter((l) => !drop(l, i)) }));
+
+    // métricas do corpo do texto
+    const body = pages.flatMap((p) => p.lines.filter(isBody));
+    const charW = median(body.filter((l) => l.s.length > 20).map((l) => (l.x1 - l.x0) / l.s.length)) || bodyH * 0.5;
+    const steps = [];
+    pages.forEach((p) => { for (let i = 1; i < p.lines.length; i++) { const a = p.lines[i - 1], b = p.lines[i]; if (a.col === b.col && isBody(a) && isBody(b)) { const g = a.y - b.y; if (g > bodyH * 0.8 && g < bodyH * 3) steps.push(g); } } });
+    const step = median(steps) || bodyH * 1.3;
+
+    // margens por coluna (com reserva global para páginas com pouco texto)
+    const marg = (lines) => ({ left: wmode(lines.map((l) => [Math.round(l.x0), l.s.length])), right: pct(lines.map((l) => l.x1), 0.95) });
+    const globalM = {};
+    [0, 1, 2].forEach((c) => { const ls = body.filter((l) => l.col === c && l.s.length > 15); if (ls.length) globalM[c] = marg(ls); });
+    const pageM = pages.map((p) => {
+      const m = {};
+      [0, 1, 2].forEach((c) => {
+        const ls = p.lines.filter((l) => l.col === c && isBody(l) && l.s.length > 15);
+        m[c] = ls.length >= 4 ? marg(ls) : (globalM[c] || marg(ls.length ? ls : p.lines.filter((l) => l.col === c).concat([{ x0: 0, x1: p.w, s: 'x' }])));
+      });
+      return m;
+    });
+    const indentOf = (l, m) => l.x0 - m.left;
+    const indentCount = body.filter((l, i) => { const m = globalM[l.col]; return m && indentOf(l, m) > bodyH * 0.8 && indentOf(l, m) < bodyH * 5; }).length;
+    const usesIndent = indentCount >= Math.max(3, body.length * 0.03);
+
+    const out = []; let para = null, prev = null, cap = '', notes = [], note = null, lastHead = null;
+    const closePara = () => {
+      if (para) { out.push({ t: para.t, h: 0, pg: para.pg }); para = null; }
+      if (notes.length) { out.push(...notes); notes = []; }
+    };
+    const cwOf = (l) => (l.s.length > 8 ? (l.x1 - l.x0) / l.s.length : charW);
+    const firstWordW = (l) => ((l.s.split(' ')[0] || '').length) * cwOf(l);
+
+    pages.forEach((p, pi) => {
+      const pg = pi + 1;
+      const bodyMinY = Math.min(...p.lines.filter(isBody).map((l) => l.y), Infinity);
+      for (const l of p.lines) {
+        const m = pageM[pi][l.col] || pageM[pi][0];
+        // nota de rodapé: letra menor, abaixo do texto principal
+        if (l.h < bodyH * 0.88 && l.y < bodyMinY) {
+          if (note && !/^(\d{1,3}|[*†‡])[\s.)]/.test(l.s)) note.t += (HYPH.test(note.t) && LOWER.test(l.s)) ? '' + l.s : ' ' + l.s, note.t = note.t.replace(/-([a-zà-ÿ])/, (x, c) => x);
+          else { note = { t: l.s, h: 0, kind: 'note', pg }; notes.push(note); }
+          continue;
+        }
+        note = null;
+        // capitular
+        if (l.s.length <= 2 && l.h >= bodyH * 1.6 && /\p{L}/u.test(l.s)) {
+          if (para && para.pg === pg && para.lines <= 3) para.t = l.s.trim() + para.t; else cap = l.s.trim();
+          continue;
+        }
+        // separador de cena
+        if (SEP.test(l.s)) { closePara(); out.push({ t: '', h: 0, kind: 'sep', pg }); prev = null; lastHead = null; continue; }
+        // título: letra maior, ou linha curta centralizada em caixa alta / "Capítulo"
+        const wide = m.right - m.left;
+        const centered = Math.abs((l.x0 + l.x1) / 2 - (m.left + m.right) / 2) < wide * 0.08 && (l.x1 - l.x0) < wide * 0.75;
+        const bigger = l.h > bodyH * 1.18 && l.s.length < 120;
+        const named = l.s.length < 80 && centered && (CHAP.test(l.s) || ROMAN.test(l.s) || isCaps(l.s));
+        if (bigger || named) {
+          closePara();
+          const lv = l.h > bodyH * 1.45 || CHAP.test(l.s) ? 1 : 2;
+          if (lastHead && lastHead.pg === pg && lastHead.y - l.y < Math.max(l.h, bodyH) * 2.6) { lastHead.b.t += ' ' + l.s; lastHead.y = l.y; }
+          else { const b = { t: l.s, h: lv, pg }; out.push(b); lastHead = { b, y: l.y, pg }; }
+          prev = null;
+          continue;
+        }
+        lastHead = null;
+        // corpo do texto: continua o parágrafo ou começa outro?
+        let brk = true;
+        if (para && prev) {
+          const pm = prev.m;
+          // "cheia" = a primeira palavra da linha seguinte não caberia no fim desta (margem de folga para erros de medida)
+          const full = (pm.right - prev.x1) < firstWordW(l) + cwOf(prev) * 2.5;
+          const indent = indentOf(l, m) > Math.max(bodyH * 0.8, charW * 2) && (l.x0 - prev.x0) > bodyH * 0.5;
+          const dialog = DIALOG.test(l.s) && TERM.test(prev.s);
+          if (prev.pg === pg && prev.col === l.col) {
+            const gap = prev.y - l.y;
+            if (gap > step * 1.3 || gap < -step * 0.5) brk = true;
+            else if (HYPH.test(prev.s)) brk = false;
+            else brk = indent || dialog || !full;
+          } else {
+            // virou a página ou a coluna
+            brk = HYPH.test(prev.s) ? false : (!full || dialog || (usesIndent && indent));
+          }
+        }
+        if (brk) { closePara(); para = { t: cap + l.s, pg, lines: 1 }; cap = ''; }
+        else {
+          const t = para.t;
+          if (/-$/.test(t) && /^-/.test(l.s)) para.t = t + l.s.slice(1);              // "bem-" / "-estar"
+          else if (HYPH.test(t) && LOWER.test(l.s)) para.t = t.slice(0, -1) + l.s;   // hifenização
+          else para.t = t + ' ' + l.s;
+          para.lines++;
+        }
+        prev = Object.assign({}, l, { pg, m });
       }
     });
-    flush();
-  });
-  return blocks;
-}
-/*PDFBLOCKS-END*/
+    closePara();
+    return out;
+  }
+  return { linesFromItems, blocks };
+})();
+/*REFLOW-END*/
 
+async function pdfOutline(doc) {
+  try {
+    const items = await doc.getOutline();
+    if (!items) return [];
+    const out = [];
+    const walk = async (list, depth) => {
+      for (const it of list) {
+        let p = null;
+        try {
+          let dest = it.dest;
+          if (typeof dest === 'string') dest = await doc.getDestination(dest);
+          if (Array.isArray(dest) && dest[0] != null) p = (typeof dest[0] === 'object' ? await doc.getPageIndex(dest[0]) : dest[0]) + 1;
+        } catch (e) { p = null; }
+        if (p) out.push({ title: (it.title || '').trim() || 'Sem título', depth, p });
+        if (it.items && it.items.length && depth < 3) await walk(it.items, depth + 1);
+      }
+    };
+    await walk(items, 0);
+    return out;
+  } catch (e) { return []; }
+}
 async function pdfTextBook(doc, meta) {
   const c = await idbGet('parsed', meta.id);
   if (c && c.ver === PARSE_VER) return { title: meta.title, chapters: c.book.chapters, lang: c.book.lang, format: 'pdf' };
-  const pageLines = [];
+  const pages = [];
   for (let p = 1; p <= doc.numPages; p++) {
-    status('Preparando o modo Texto… página ' + p + ' de ' + doc.numPages);
-    const tc = await (await doc.getPage(p)).getTextContent();
-    const raw = []; let cur = null, prevEnd = 0;
-    for (const it of tc.items) {
-      if (!('str' in it)) continue;
-      if (it.str === '') { if (it.hasEOL && cur) { raw.push(cur); cur = null; } continue; }
-      const x = it.transform[4], y = it.transform[5], h = Math.abs(it.transform[3]) || it.height || 10, w = it.width || 0;
-      if (cur && Math.abs(y - cur.y) < Math.max(2, cur.h * 0.45)) {
-        if (x - prevEnd > h * 0.2 && !cur.s.endsWith(' ') && !it.str.startsWith(' ')) cur.s += ' ';
-        cur.s += it.str; cur.x0 = Math.min(cur.x0, x); cur.x1 = Math.max(cur.x1, x + w); cur.h = Math.max(cur.h, h);
-      } else {
-        if (cur) raw.push(cur);
-        cur = { y, s: it.str, x0: x, x1: x + w, h };
-      }
-      prevEnd = x + w;
-      if (it.hasEOL && cur) { raw.push(cur); cur = null; }
-    }
-    if (cur) raw.push(cur);
-    pageLines.push(raw.map((l) => ({ y: l.y, x0: l.x0, x1: l.x1, h: l.h, s: l.s.replace(/­/g, '').replace(/\s+/g, ' ').trim() })).filter((l) => l.s));
+    status('Preparando o texto corrido… página ' + p + ' de ' + doc.numPages);
+    const pg = await doc.getPage(p);
+    const v = pg.view || [0, 0, 600, 800];
+    const tc = await pg.getTextContent();
+    pages.push({ w: v[2] - v[0], h: v[3] - v[1], lines: Reflow.linesFromItems(tc.items, v[2] - v[0], v[0]) });
   }
-  const blocks = pdfBlocks(pageLines);
-  if (blocks.reduce((s, b) => s + b.t.length, 0) < 40) throw fail('Este PDF não tem texto para o modo Texto (parece ser digitalizado). Ele continua no modo Página original.');
-  const chapters = chaptersFromBlocks(blocks, meta.title);
+  const blocks = Reflow.blocks(pages);
+  if (blocks.reduce((s, b) => s + (b.t || '').length, 0) < 40) throw fail('Este PDF não tem texto para o modo Texto (parece ser digitalizado). Ele continua no modo Página original.');
+  const chapters = chaptersFromOutline(blocks, await pdfOutline(doc), meta.title) || chaptersFromBlocks(blocks, meta.title);
   idbPut('parsed', meta.id, { ver: PARSE_VER, book: { chapters, lang: 'pt-BR' } });
   return { title: meta.title, chapters, lang: 'pt-BR', format: 'pdf' };
 }
@@ -989,7 +1202,7 @@ function sampleBook() {
 
 /* ================= motor de texto (EPUB, DOCX, TXT, PDF em modo Texto) ================= */
 const T = (() => {
-  let book = null, meta = null, cum = [], total = 1, ch = 0, pages = 1, pi = 0, W = 0, H = 0, tok = 0;
+  let book = null, meta = null, cum = [], total = 1, ch = 0, pages = 1, pi = 0, W = 0, H = 0, tok = 0, marks = [];
   const frac = () => (cum[ch] + (pi / pages) * book.chapters[ch].len) / total;
   async function layout(target) {
     const my = ++tok;
@@ -1004,7 +1217,13 @@ const T = (() => {
     await Promise.all([...flow.querySelectorAll('img')].map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))));
     if (my !== tok) return;
     pages = Math.max(1, Math.round((flow.scrollWidth + GAP) / (W + GAP)));
-    pi = target === 'last' ? pages - 1 : clamp(Math.floor((+target || 0) * pages + 1e-6), 0, pages - 1);
+    // onde começa cada página do PDF original (para sincronizar com o modo Página)
+    const fx = flow.getBoundingClientRect().left;
+    marks = [...flow.querySelectorAll('[data-pg]')].map((e) => ({ pg: +e.dataset.pg, col: Math.floor((e.getBoundingClientRect().left - fx + 2) / (W + GAP)) }));
+    if (target && typeof target === 'object') {
+      let c = 0; marks.forEach((k) => { if (k.pg <= target.pg) c = k.col; });
+      pi = clamp(c, 0, pages - 1);
+    } else pi = target === 'last' ? pages - 1 : clamp(Math.floor((+target || 0) * pages + 1e-6), 0, pages - 1);
     draw();
   }
   async function show(i, target) {
@@ -1017,7 +1236,9 @@ const T = (() => {
       const c = book.chapters[ch];
       meta.pos = { ch, f: pi / pages };
       meta.pct = Math.min(100, Math.round(100 * (cum[ch] + ((pi + 1) / pages) * c.len) / total));
-      if (c.pg) meta.page = c.pg;
+      let pg = c.pg;
+      marks.forEach((k) => { if (k.col <= pi) pg = k.pg; });
+      if (pg) meta.page = pg;
       saveSoon();
     }
     updateBars();
@@ -1034,9 +1255,10 @@ const T = (() => {
       b.chapters.forEach((c) => { cum.push(t); t += c.len; }); total = Math.max(1, t);
       pageEl.lang = b.lang || 'pt-BR';
       let pos = (m && m.pos) || { ch: 0, f: 0 };
-      if (m && m.sync && m.page) { let i = 0; b.chapters.forEach((c, k) => { if (c.pg && c.pg <= m.page) i = k; }); pos = { ch: i, f: 0 }; }
+      let target = pos.f || 0;
+      if (m && m.sync && m.page) { let i = 0; b.chapters.forEach((c, k) => { if (c.pg && c.pg <= m.page) i = k; }); pos = { ch: i }; target = { pg: m.page }; }
       if (m) delete m.sync;
-      await show(clamp(pos.ch | 0, 0, b.chapters.length - 1), pos.f || 0);
+      await show(clamp(pos.ch | 0, 0, b.chapters.length - 1), target);
     },
     close() { tok++; flow.innerHTML = ''; if (book && book.urls) book.urls.forEach((u) => URL.revokeObjectURL(u)); book = null; meta = null; },
     next() { if (pi < pages - 1) { pi++; draw(); } else if (ch < book.chapters.length - 1) show(ch + 1, 0); else notify('Fim do livro.'); },
@@ -1086,7 +1308,7 @@ function unionBox(a, b) {
 
 const P = (() => {
   const FULL = { x0: 0, y0: 0, x1: 1, y1: 1 };
-  let doc = null, meta = null, n = 0, page = 1, zoom = 1, ox = 0, oy = 0, view = null, tok = 0, pre = 0;
+  let doc = null, meta = null, n = 0, page = 1, zoom = 1, fx = 0, ox = 0, oy = 0, view = null, tok = 0, pre = 0;
   let sizes = new Map(), boxes = new Map(), common = null, cache = new Map(), labels = null, outline = [];
   let zTimer = 0, preTimer = 0;
   const vw = () => pdfview.clientWidth, vh = () => pdfview.clientHeight;
@@ -1167,6 +1389,7 @@ const P = (() => {
     const s = view.base * zoom, cw = view.w * s, chh = view.h * s, W = vw(), H = vh();
     ox = cw <= W ? (W - cw) / 2 : clamp(ox, W - cw, 0);
     oy = chh <= H ? (H - chh) / 2 : clamp(oy, H - chh, 0);
+    fx = cw > W ? -ox / cw : 0;
     leaf.style.width = cw + 'px'; leaf.style.height = chh + 'px';
     leaf.style.transform = 'translate3d(' + ox + 'px,' + oy + 'px,0)';
     [...leaf.children].forEach((c, i) => {
@@ -1185,7 +1408,7 @@ const P = (() => {
     if (my !== tok) return;
     view = v;
     leaf.replaceChildren(...canvases);
-    if (!opts.keepOffset) { ox = 0; oy = opts.atEnd ? -1e9 : 0; }
+    if (!opts.keepOffset) { ox = -fx * v.w * s; oy = opts.atEnd ? -1e9 : 0; }  // mantém o enquadramento lateral
     place();
     report();
     prefetchSoon();
@@ -1207,43 +1430,23 @@ const P = (() => {
   function report() {
     if (meta) {
       const last = pagesFor(page).slice(-1)[0];
-      meta.page = page; meta.pages = n;
+      meta.page = page; meta.pages = n; meta.zoom = zoom; meta.fx = fx;
       meta.pct = n > 1 ? Math.round(100 * (last - 1) / (n - 1)) : 100;
       saveSoon();
     }
     updateBars();
   }
   const labelOf = (p) => (labels && labels[p - 1] && labels[p - 1] !== String(p) ? labels[p - 1] : '');
-  async function loadOutline() {
-    try {
-      const items = await doc.getOutline();
-      if (!items) return [];
-      const out = [];
-      const walk = async (list, depth) => {
-        for (const it of list) {
-          let p = null;
-          try {
-            let dest = it.dest;
-            if (typeof dest === 'string') dest = await doc.getDestination(dest);
-            if (Array.isArray(dest) && dest[0] != null) p = (typeof dest[0] === 'object' ? await doc.getPageIndex(dest[0]) : dest[0]) + 1;
-          } catch (e) { p = null; }
-          if (p) out.push({ title: (it.title || '').trim() || 'Sem título', depth, p });
-          if (it.items && it.items.length && depth < 3) await walk(it.items, depth + 1);
-        }
-      };
-      await walk(items, 0);
-      return out;
-    } catch (e) { return []; }
-  }
-  function go(p) { page = pagesFor(p)[0]; zoom = 1; paint(); }
+  function go(p) { page = pagesFor(p)[0]; paint(); }
 
   return {
     kind: 'pdf',
     async open(d, m) {
       doc = d; meta = m; n = d.numPages;
-      sizes = new Map(); boxes = new Map(); common = null; cache = new Map(); view = null; zoom = 1;
+      sizes = new Map(); boxes = new Map(); common = null; cache = new Map(); view = null;
+      zoom = clamp(m.zoom || 1, 1, 5); fx = m.fx || 0;
       leaf.replaceChildren();
-      [labels, outline] = await Promise.all([d.getPageLabels().catch(() => null), loadOutline()]);
+      [labels, outline] = await Promise.all([d.getPageLabels().catch(() => null), pdfOutline(d)]);
       page = pagesFor(clamp(m.page || 1, 1, n))[0];
       await paint();
     },
@@ -1263,7 +1466,7 @@ const P = (() => {
     prev() {
       const first = pagesFor(page)[0];
       if (first <= 1) return;
-      page = pagesFor(first - 1)[0]; zoom = 1; paint({ atEnd: true });
+      page = pagesFor(first - 1)[0]; paint({ atEnd: true });
     },
     goto: go,
     relayout() { if (doc) { common = S.crop ? common : null; go(page); } },
@@ -1273,7 +1476,7 @@ const P = (() => {
       const s = view.base * zoom, cw = view.w * s, chh = view.h * s;
       return { left: ox >= -1, right: ox <= vw() - cw + 1, top: oy >= -1, bottom: oy <= vh() - chh + 1 };
     },
-    pan(dx, dy) { if (view) { ox += dx; oy += dy; place(); } },
+    pan(dx, dy) { if (view) { ox += dx; oy += dy; place(); if (meta) { meta.fx = fx; saveSoon(); } } },
     zoom: () => zoom,
     zoomTo(z, cx, cy) {
       if (!view) return;
@@ -1451,20 +1654,31 @@ function openPrefs() {
   const pdfBook = reading && curMeta && curMeta.format === 'pdf';
   $('gBook').hidden = !pdfBook;
   $('gText').hidden = !!(reading && engine.kind === 'pdf');
-  $('gPdf').hidden = !!(reading && !(engine.kind === 'pdf'));
+  $('gPdf').hidden = !!(reading && !pdfBook);
   syncControls();
   showPanel($('prefs'));
 }
-document.querySelectorAll('[data-book="mode"]').forEach((b) => b.addEventListener('click', () => {
+function switchMode(v) {
   if (!curMeta || curMeta.format !== 'pdf') return;
-  const v = b.dataset.v;
-  if ((curMeta.mode || 'page') === v) return;
+  if ((curMeta.mode || S.pdfMode) === v) { closePanel(); return; }
   curMeta.mode = v;
   if (v === 'text') curMeta.sync = true;
   syncControls(); flushSave();
   const id = curMeta.id;
-  closePanel(() => openFromLibrary(id));
-}));
+  closePanel(() => { hideBars(); openFromLibrary(id); });
+}
+document.querySelectorAll('[data-book="mode"]').forEach((b) => b.addEventListener('click', () => switchMode(b.dataset.v)));
+$('btnMode').addEventListener('click', () => switchMode(engine && engine.kind === 'pdf' ? 'text' : 'page'));
+function syncModeBtn() {
+  const b = $('btnMode'), isPdf = !!(curMeta && curMeta.format === 'pdf');
+  b.hidden = !isPdf;
+  if (!isPdf) return;
+  const toText = engine && engine.kind === 'pdf';
+  b.setAttribute('aria-label', toText ? 'Ler como texto corrido' : 'Ver a página original');
+  b.innerHTML = toText
+    ? '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 6h14M5 10h14M5 14h14M5 18h9"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4" stroke-linecap="round"/></svg>';
+}
 $('btnLib').addEventListener('click', backToLibrary);
 $('btnToc').addEventListener('click', openToc);
 $('btnAa').addEventListener('click', openPrefs);
@@ -1552,6 +1766,7 @@ async function startReading(eng, meta, openFn) {
   engine = eng; curMeta = meta;
   app.dataset.engine = eng.kind;
   $('btitle').textContent = meta ? meta.title : 'Exemplo de uso';
+  syncModeBtn();
   if (meta) { meta.opened = Date.now(); idbPut('lib', meta.id, meta); }
   enterReader();
   await openFn();
@@ -1570,10 +1785,10 @@ async function openFromLibrary(id) {
       const f = await idbGet('files', id);
       if (!f || !f.buf) throw fail('Não encontrei o arquivo deste livro. Remova e adicione de novo.');
       const doc = await loadPdf(f.buf);
-      if ((meta.mode || 'page') === 'text') {
+      if ((meta.mode || S.pdfMode) === 'text') {
         let b;
         try { b = await pdfTextBook(doc, meta); }
-        catch (e) { meta.mode = 'page'; idbPut('lib', meta.id, meta); notify((e && e.userMessage) || 'O modo Texto não funcionou neste PDF.'); }
+        catch (e) { if (e && e.userMessage) { meta.mode = 'page'; idbPut('lib', meta.id, meta); } notify((e && e.userMessage) || 'O texto corrido não funcionou neste PDF.'); }
         if (b) { doc.destroy(); await startReading(T, meta, () => T.open(b, meta)); return; }
       }
       await startReading(P, meta, () => P.open(doc, meta));
@@ -1621,7 +1836,7 @@ stage.addEventListener('pointerdown', (e) => {
   try { stage.setPointerCapture(e.pointerId); } catch (err) { /* opcional */ }
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 1) g = { x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, t0: Date.now(), edges: engine.edges(), moved: false };
-  else if (ptrs.size === 2 && engine.kind === 'pdf') { const [a, b] = [...ptrs.values()]; g = { pinch: true, d0: Math.max(10, dist(a, b)), z0: engine.zoom() }; }
+  else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; g = { pinch: true, text: engine.kind !== 'pdf', d0: Math.max(10, dist(a, b)), z0: engine.zoom(), r: 1 }; }
 });
 stage.addEventListener('pointermove', (e) => {
   const p = ptrs.get(e.pointerId);
@@ -1630,8 +1845,10 @@ stage.addEventListener('pointermove', (e) => {
   if (g.pinch) {
     if (ptrs.size < 2) return;
     const [a, b] = [...ptrs.values()];
+    g.r = dist(a, b) / g.d0;
+    if (g.text) { pageEl.style.transform = 'scale(' + clamp(g.r, 0.6, 1.8) + ')'; return; }
     const [cx, cy] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
-    engine.zoomTo(g.z0 * dist(a, b) / g.d0, cx, cy);
+    engine.zoomTo(g.z0 * g.r, cx, cy);
     return;
   }
   const dx = e.clientX - g.lx, dy = e.clientY - g.ly;
@@ -1644,7 +1861,14 @@ function endPointer(e, cancelled) {
   ptrs.delete(e.pointerId);
   if (!g) return;
   if (g.pinch) {
-    if (!g.committed) { g.committed = true; engine.commitZoom(); }
+    if (!g.committed) {
+      g.committed = true;
+      if (g.text) {
+        pageEl.style.transform = '';
+        const steps = Math.round(Math.log(g.r) / Math.log(1.15));
+        if (steps) { S.fs = clamp(S.fs + steps, 0, FS.length - 1); commit('fs'); notify('Tamanho do texto: ' + (S.fs + 1) + ' de ' + FS.length); }
+      } else engine.commitZoom();
+    }
     if (!ptrs.size) g = null;
     return;
   }
