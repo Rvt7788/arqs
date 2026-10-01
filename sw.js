@@ -1,6 +1,6 @@
 /* Penumbra: service worker. Guarda o app para uso offline.
    Suba a versão abaixo sempre que alterar qualquer arquivo do app. */
-const VERSION = 'penumbra-v10';
+const VERSION = 'penumbra-v11';
 const SHELL = [
   './',
   'index.html',
