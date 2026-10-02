@@ -202,6 +202,10 @@ body.drag #home { outline: 2px dashed var(--accent); outline-offset: -10px; }
 #flow { column-fill: auto; will-change: transform; }
 #flow > :first-child { margin-top: 1.4em; }
 #flow p { margin: 0; text-indent: 1.5em; orphans: 2; widows: 2; }
+/* ponto de leitura: começa numa página nova (a continuação do parágrafo vem sem recuo) */
+#flow .brk { break-before: column; -webkit-column-break-before: always; }
+#flow .cont { text-indent: 0; }
+#flow li.cont { list-style: none; }
 #flow :is(h1, h2, h3, h4) + p { text-indent: 0; }
 #flow h1, #flow h2, #flow h3, #flow h4 {
   text-align: center; text-indent: 0; line-height: 1.25; font-weight: 600; hyphens: manual; -webkit-hyphens: manual;
@@ -1305,7 +1309,7 @@ const T = (() => {
   function indexText() {
     txt = []; txs = []; let t = 0;
     const w = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
-    for (let n = w.nextNode(); n; n = w.nextNode()) { if (!/\S/.test(n.data)) continue; txt.push(n); txs.push(t); t += n.length; }
+    for (let n = w.nextNode(); n; n = w.nextNode()) { txt.push(n); txs.push(t); t += n.length; }
     tlen = t; cur = null;
   }
   function colOf(i, fx) {
@@ -1317,13 +1321,37 @@ const T = (() => {
     for (const r of rng.getClientRects()) if (r.width || r.height) return Math.floor((r.left - fx + 2) / (W + GAP));
     return null;
   }
-  function colNear(i, fx) { for (let k = i, e = Math.min(tlen, i + 64); k < e; k++) { const c = colOf(k, fx); if (c != null) return c; } return null; }
+  function colNear(i, fx) { for (let k = i, e = Math.min(tlen, i + 256); k < e; k++) { const c = colOf(k, fx); if (c != null) return c; } return null; }
   function startOf(p) {
     if (!tlen) return null;
     const fx = flow.getBoundingClientRect().left;
     let lo = 0, hi = tlen;
     while (lo < hi) { const m = (lo + hi) >> 1, c = colNear(m, fx); if (c == null || c >= p) hi = m; else lo = m + 1; }
     return lo < tlen && colNear(lo, fx) === p ? lo : null; // página só com imagem: sem âncora
+  }
+  // Corta o capítulo na letra o: o parágrafo é dividido ali e a segunda parte começa numa
+  // página nova. Assim a página atual começa sempre na mesma palavra, qualquer que seja o
+  // tamanho da letra ou da área; só a página anterior pode ficar mais curta.
+  function splitAt(o) {
+    if (!(o > 0 && o < tlen)) return o;
+    let lo = 0, hi = txt.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (txs[m] <= o) lo = m; else hi = m - 1; }
+    const n = txt[lo]; let k = o - txs[lo];
+    // a linha pode começar no meio de uma palavra hifenizada: corta no começo da palavra
+    while (k > 0 && /\S/.test(n.data[k - 1])) { k--; o--; }
+    let blk = n.parentNode;
+    while (blk && blk !== flow && !/^(block|list-item)$/.test(getComputedStyle(blk).display)) blk = blk.parentNode;
+    if (!blk || blk === flow || blk.closest('table')) return o;
+    const r = document.createRange();
+    r.setStart(flow, 0); r.setEnd(n, k);
+    if (!r.toString().trim()) return o; // começo do capítulo: nada a cortar
+    r.setStart(blk, 0);
+    if (!r.toString().trim()) { blk.classList.add('brk'); return o; } // já começa um parágrafo
+    r.setStart(n, k); r.setEnd(blk, blk.childNodes.length);
+    const tail = r.extractContents(), nb = blk.cloneNode(false);
+    nb.removeAttribute('id'); nb.removeAttribute('data-pg'); nb.classList.add('brk', 'cont');
+    nb.appendChild(tail); blk.after(nb);
+    return o;
   }
   const frac = () => (cum[ch] + (pi / pages) * book.chapters[ch].len) / total;
   async function layout(target) {
@@ -1345,6 +1373,11 @@ const T = (() => {
     if (W < 80 || H < 80) return;
     pageEl.style.width = W + 'px'; pageEl.style.height = H + 'px'; pageEl.style.setProperty('--ph', H + 'px');
     Object.assign(flow.style, { width: W + 'px', height: H + 'px', columnWidth: W + 'px', columnGap: GAP + 'px' });
+    let anchor = null;
+    if (target && typeof target === 'object' && target.a != null) {
+      flow.innerHTML = book.chapters[ch].html; indexText();
+      anchor = splitAt(target.a); indexText();
+    }
     try { await Promise.race([document.fonts.load(FS[S.fs] + 'px Literata'), new Promise((r) => setTimeout(r, 1200))]); } catch (e) { /* fonte reserva */ }
     await Promise.all([...flow.querySelectorAll('img')].map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))));
     if (my !== tok) return;
@@ -1352,11 +1385,11 @@ const T = (() => {
     // onde começa cada página do PDF original (para sincronizar com o modo Página)
     const fx = flow.getBoundingClientRect().left;
     marks = [...flow.querySelectorAll('[data-pg]')].map((e) => ({ pg: +e.dataset.pg, col: Math.floor((e.getBoundingClientRect().left - fx + 2) / (W + GAP)) }));
-    if (target && typeof target === 'object' && target.o != null) {
-      const c = colNear(target.o, fx);
+    if (anchor != null) {
+      const c = colNear(anchor, fx);
       pi = clamp(c == null ? 0 : c, 0, pages - 1);
-      // a âncora continua a mesma: vários ajustes seguidos não fazem a leitura escorregar
-      draw(target.o);
+      // a âncora continua a mesma até o leitor virar a página
+      draw(anchor);
       return;
     } else if (target && typeof target === 'object') {
       let c = 0; marks.forEach((k) => { if (k.pg <= target.pg) c = k.col; });
@@ -1375,7 +1408,7 @@ const T = (() => {
     if (meta) {
       const c = book.chapters[ch];
       meta.pos = { ch, f: pi / pages };
-      if (cur != null) meta.pos.o = cur;
+      if (cur != null) meta.pos.a = cur;
       meta.pct = Math.min(100, Math.round(100 * (cum[ch] + ((pi + 1) / pages) * c.len) / total));
       let pg = c.pg;
       marks.forEach((k) => { if (k.col <= pi) pg = k.pg; });
@@ -1396,7 +1429,7 @@ const T = (() => {
       b.chapters.forEach((c) => { cum.push(t); t += c.len; }); total = Math.max(1, t);
       pageEl.lang = b.lang || 'pt-BR';
       let pos = (m && m.pos) || { ch: 0, f: 0 };
-      let target = pos.o != null ? { o: pos.o } : (pos.f || 0);
+      let target = pos.a != null ? { a: pos.a } : (pos.f || 0);
       if (m && m.sync && m.page) { let i = 0; b.chapters.forEach((c, k) => { if (c.pg && c.pg <= m.page) i = k; }); pos = { ch: i }; target = { pg: m.page }; }
       if (m) delete m.sync;
       await show(clamp(pos.ch | 0, 0, b.chapters.length - 1), target);
@@ -1404,7 +1437,7 @@ const T = (() => {
     close() { tok++; flow.innerHTML = ''; if (book && book.urls) book.urls.forEach((u) => URL.revokeObjectURL(u)); book = null; meta = null; },
     next() { if (pi < pages - 1) { pi++; draw(); } else if (ch < book.chapters.length - 1) show(ch + 1, 0); else notify('Fim do livro.'); },
     prev() { if (pi > 0) { pi--; draw(); } else if (ch > 0) show(ch - 1, 'last'); },
-    relayout() { if (book) layout(cur != null ? { o: cur } : pi / pages); },
+    relayout() { if (book) layout(cur != null ? { a: cur } : pi / pages); },
     pannable: () => false, edges: () => ALL_EDGES, pan() {}, zoom: () => 1, zoomTo() {}, commitZoom() {}, toggleZoom() {},
     info() {
       const c = book.chapters[ch], rem = (1 - (pi + 1) / pages) * c.len, min = rem / 1000;
