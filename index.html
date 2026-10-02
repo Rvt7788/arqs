@@ -125,6 +125,8 @@ button, input { font: inherit; color: inherit; }
 }
 .ib:hover { background: var(--line); }
 .ib.txt { width: auto; padding: 0 12px; font-family: var(--serif); font-size: 18px; font-weight: 600; }
+.ib.fsb { width: 36px; }
+#app[data-engine="pdf"] .fsb { display: none; }
 
 /* ---------- biblioteca ---------- */
 #home { position: absolute; inset: 0; overflow: auto; padding: 0 20px 40px; }
@@ -182,6 +184,13 @@ body.drag #home { outline: 2px dashed var(--accent); outline-offset: -10px; }
 #stage { position: relative; flex: 1; min-height: 0; padding: 22px var(--gutter); touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; }
 #app[data-engine="pdf"] #stage { padding: 0; }
 #app[data-engine="pdf"] #page, #app[data-engine="text"] #pdfview { display: none; }
+/* área do texto escolhida pela pinça: posição e tamanho fixos dentro da tela */
+#app[data-frame] #page { position: absolute; margin: 0; }
+#guide {
+  position: absolute; z-index: 2; pointer-events: none; box-sizing: border-box;
+  border: 1.5px dashed var(--accent); border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
 
 #page {
   margin: 0 auto; overflow: hidden;
@@ -326,6 +335,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
   <main id="stage" aria-label="Página do livro">
     <div id="page" lang="pt-BR" data-font="serif"><div id="flow"></div></div>
     <div id="pdfview"><div id="leaf"></div></div>
+    <div id="guide" hidden></div>
   </main>
 
   <header id="top" class="bar" hidden>
@@ -338,7 +348,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     </button>
     <button class="ib" id="btnMode" type="button" aria-label="Ler como texto corrido" hidden></button>
     <button class="ib" id="btnFs" type="button" aria-label="Tela cheia"></button>
+    <button class="ib fsb" id="fsDown" type="button" aria-label="Diminuir a letra">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 12h12"/></svg>
+    </button>
     <button class="ib txt" id="btnAa" type="button" aria-label="Ajustes de leitura">Aa</button>
+    <button class="ib fsb" id="fsUp" type="button" aria-label="Aumentar a letra">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 12h12M12 6v12"/></svg>
+    </button>
   </header>
 
   <footer id="bottom" class="bar" hidden>
@@ -415,6 +431,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
           <button type="button" data-set="margin" data-v="1">Médias</button>
           <button type="button" data-set="margin" data-v="2">Largas</button>
         </div>
+        <p class="hint" id="frameHint"></p>
       </div>
     </div>
     <div class="group" id="gPdf">
@@ -567,12 +584,12 @@ function status(msg) { const s = $('status'); s.textContent = msg || ''; s.hidde
 function fail(msg) { const e = new Error(msg); e.userMessage = msg; return e; }
 
 /* ================= ajustes ================= */
-const DEF = { fs: 2, font: 'serif', theme: 'auto', bright: 0.85, warm: 0, margin: 1, fit: 'page', crop: true, spread: false, fsAuto: true, orient: 'auto', wake: true, pdfMode: 'text', pdfDef: 2 };
+const DEF = { fs: 2, font: 'serif', theme: 'auto', bright: 0.85, warm: 0, margin: 1, frame: null, fit: 'page', crop: true, spread: false, fsAuto: true, orient: 'auto', wake: true, pdfMode: 'text', pdfDef: 2 };
 const saved = store.get('penumbra:settings', {});
 // O padrão dos PDFs passou a ser texto corrido: ajustes salvos antes disso mudam uma vez.
 if (saved.pdfMode && saved.pdfDef !== DEF.pdfDef) { saved.pdfMode = DEF.pdfMode; saved.pdfDef = DEF.pdfDef; store.set('penumbra:settings', saved); }
 const S = Object.assign({}, DEF, saved);
-const RELAYOUT = new Set(['fs', 'font', 'margin', 'fit', 'crop', 'spread']);
+const RELAYOUT = new Set(['fs', 'font', 'margin', 'frame', 'fit', 'crop', 'spread']);
 const parseV = (v) => (v === 'true' ? true : v === 'false' ? false : /^\d+$/.test(v) ? +v : v);
 
 function applySettings() {
@@ -581,6 +598,8 @@ function applySettings() {
   pageEl.style.fontSize = FS[S.fs] + 'px';
   pageEl.dataset.font = S.font;
   app.style.setProperty('--gutter', [16, 28, 44][S.margin] + 'px');
+  app.toggleAttribute('data-frame', !!S.frame);
+  if (!S.frame) { pageEl.style.left = ''; pageEl.style.top = ''; }
   $('dim').style.opacity = String((1 - S.bright) * 0.85);
   $('warmov').style.opacity = String(S.warm * 0.4);
   const tc = document.querySelector('meta[name="theme-color"]');
@@ -591,8 +610,12 @@ function syncControls() {
   $('bright').value = Math.round(S.bright * 100);
   $('warm').value = Math.round(S.warm * 100);
   document.querySelectorAll('[data-set]').forEach((b) => {
-    b.setAttribute('aria-pressed', String(S[b.dataset.set]) === b.dataset.v ? 'true' : 'false');
+    const k = b.dataset.set, on = String(S[k]) === b.dataset.v && !(k === 'margin' && S.frame);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+  $('frameHint').textContent = S.frame
+    ? 'Margens personalizadas pela pinça. Toque numa das opções acima para voltar ao padrão.'
+    : 'Para personalizar, faça a pinça no texto: abrir ou fechar os dedos na horizontal muda a largura, na vertical muda a altura, e arrastar com os dois dedos move o texto.';
   const mode = curMeta && curMeta.format === 'pdf' ? (curMeta.mode || S.pdfMode) : '';
   document.querySelectorAll('[data-book="mode"]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === mode ? 'true' : 'false'));
 }
@@ -605,9 +628,17 @@ function commit(k) {
   if (k === 'wake') { if (S.wake) wakeOn(); else wakeOff(); }
 }
 document.querySelectorAll('[data-set]').forEach((b) => b.addEventListener('click', () => {
+  if (b.dataset.set === 'margin') S.frame = null;
   S[b.dataset.set] = parseV(b.dataset.v); commit(b.dataset.set);
 }));
 $('fs').addEventListener('input', (e) => { S.fs = +e.target.value; commit('fs'); });
+function bumpFs(d) {
+  const v = clamp(S.fs + d, 0, FS.length - 1);
+  if (v !== S.fs) { S.fs = v; commit('fs'); }
+  notify('Tamanho do texto: ' + (S.fs + 1) + ' de ' + FS.length);
+}
+$('fsDown').addEventListener('click', () => bumpFs(-1));
+$('fsUp').addEventListener('click', () => bumpFs(1));
 $('bright').addEventListener('input', (e) => { S.bright = +e.target.value / 100; commit('bright'); });
 $('warm').addEventListener('input', (e) => { S.warm = +e.target.value / 100; commit('warm'); });
 
@@ -1231,7 +1262,8 @@ function sampleBook() {
     { title: 'Como ler aqui', html: '<h2>Como ler aqui</h2>' +
       '<p>Este é um livro de exemplo, escrito só para mostrar como o leitor funciona. Vale passar as páginas para sentir o ritmo do texto.</p>' +
       '<p>Para avançar, toque na lateral direita da tela ou deslize o dedo para a esquerda ou para cima. Para voltar, toque na lateral esquerda ou deslize para a direita ou para baixo. No computador, a roda do mouse, as setas do teclado e a barra de espaço fazem o mesmo.</p>' +
-      '<p>Um toque no centro da tela mostra as barras de controle. No alto ficam a seta para voltar à biblioteca, o sumário, a tela cheia e o botão Aa, com os ajustes. Embaixo fica a barra de progresso, que você pode arrastar.</p>' +
+      '<p>Um toque no centro da tela mostra as barras de controle. No alto ficam a seta para voltar à biblioteca, o sumário, a tela cheia e o botão Aa, com os ajustes. Os botões − e +, dos lados do Aa, diminuem e aumentam a letra. Embaixo fica a barra de progresso, que você pode arrastar.</p>' +
+      '<p>Para escolher onde o texto fica, faça o movimento de pinça sobre ele. Abrir ou fechar os dedos na horizontal muda a largura; na vertical, muda a altura. Arrastar com os dois dedos move o texto. Ao soltar, a área fica fixa em todos os livros. Para voltar ao padrão, escolha uma das margens nos ajustes.</p>' +
       '<p>O botão voltar do celular leva de volta à biblioteca, onde cada livro mostra a porcentagem já lida.</p>' },
     { title: 'PDF', html: '<h2>PDF</h2>' +
       '<p>O PDF abre em texto corrido: as linhas são refeitas para caber na tela, como neste exemplo, e a letra segue os seus ajustes.</p>' +
@@ -1248,15 +1280,30 @@ function sampleBook() {
 }
 
 /* ================= motor de texto (EPUB, DOCX, TXT, PDF em modo Texto) ================= */
+// Área do texto escolhida pela pinça. Guardada em frações da tela para valer em qualquer
+// orientação ou tamanho; aqui vira pixels, sempre dentro da tela e com um mínimo legível.
+const FRAME_MIN = 140;
+function fitFrame(f, sw, sh) {
+  const w = clamp(f.w * sw, Math.min(FRAME_MIN, sw), sw), h = clamp(f.h * sh, Math.min(FRAME_MIN, sh), sh);
+  return { x: clamp(f.x * sw, 0, sw - w), y: clamp(f.y * sh, 0, sh - h), w, h };
+}
 const T = (() => {
   let book = null, meta = null, cum = [], total = 1, ch = 0, pages = 1, pi = 0, W = 0, H = 0, tok = 0, marks = [];
   const frac = () => (cum[ch] + (pi / pages) * book.chapters[ch].len) / total;
   async function layout(target) {
     const my = ++tok;
-    const cs = getComputedStyle(stage);
-    const avail = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    W = Math.floor(Math.min(avail, FS[S.fs] * 34));
-    H = Math.floor(stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+    if (S.frame) {
+      const sw = stage.clientWidth, sh = stage.clientHeight;
+      if (sw < 80 || sh < 80) return;
+      const r = fitFrame(S.frame, sw, sh);
+      W = Math.floor(r.w); H = Math.floor(r.h);
+      pageEl.style.left = Math.round(r.x) + 'px'; pageEl.style.top = Math.round(r.y) + 'px';
+    } else {
+      const cs = getComputedStyle(stage);
+      const avail = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      W = Math.floor(Math.min(avail, FS[S.fs] * 34));
+      H = Math.floor(stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+    }
     if (W < 80 || H < 80) return;
     pageEl.style.width = W + 'px'; pageEl.style.height = H + 'px'; pageEl.style.setProperty('--ph', H + 'px');
     Object.assign(flow.style, { width: W + 'px', height: H + 'px', columnWidth: W + 'px', columnGap: GAP + 'px' });
@@ -1893,8 +1940,50 @@ stage.addEventListener('pointerdown', (e) => {
   try { stage.setPointerCapture(e.pointerId); } catch (err) { /* opcional */ }
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 1) g = { x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, t0: Date.now(), edges: engine.edges(), moved: false };
-  else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; g = { pinch: true, text: engine.kind !== 'pdf', d0: Math.max(10, dist(a, b)), z0: engine.zoom(), r: 1 }; }
+  else if (ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()];
+    g = { pinch: true, text: engine.kind !== 'pdf', d0: Math.max(10, dist(a, b)), z0: engine.zoom(), r: 1 };
+    if (g.text) startFrame(g, a, b);
+  }
 });
+// Pinça no texto: ajusta a área onde o texto fica. A distância horizontal entre os dedos
+// muda a largura, a vertical muda a altura, e o ponto entre eles arrasta a área.
+const FRAME_K = 50; // amortece a razão quando os dedos estão quase alinhados num eixo
+function startFrame(s, a, b) {
+  const sr = stage.getBoundingClientRect(), pr = pageEl.getBoundingClientRect();
+  const [mx, my] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+  s.f0 = { x: pr.left - sr.left, y: pr.top - sr.top, w: pr.width, h: pr.height };
+  s.m0 = [mx, my]; s.dx0 = Math.abs(a.x - b.x); s.dy0 = Math.abs(a.y - b.y);
+  s.box = null;
+}
+function moveFrame(s, a, b) {
+  const sw = stage.clientWidth, sh = stage.clientHeight, f = s.f0;
+  const rx = (Math.abs(a.x - b.x) + FRAME_K) / (s.dx0 + FRAME_K);
+  const ry = (Math.abs(a.y - b.y) + FRAME_K) / (s.dy0 + FRAME_K);
+  const [mx, my] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+  // o ponto sob os dedos continua sob os dedos enquanto a área cresce ou encolhe
+  const w = f.w * rx, h = f.h * ry;
+  const x = mx - (s.m0[0] - f.x) * rx, y = my - (s.m0[1] - f.y) * ry;
+  const r = fitFrame({ x: x / sw, y: y / sh, w: w / sw, h: h / sh }, sw, sh);
+  s.box = r;
+  const gd = $('guide');
+  Object.assign(gd.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+  gd.hidden = false; pageEl.style.opacity = '0.35';
+}
+function endFrame(s) {
+  $('guide').hidden = true; pageEl.style.opacity = '';
+  const r = s.box, f = s.f0;
+  if (!r) return;
+  // dois dedos que mal se mexeram não viram margem personalizada
+  if (Math.abs(r.x - f.x) < 6 && Math.abs(r.y - f.y) < 6 && Math.abs(r.w - f.w) < 6 && Math.abs(r.h - f.h) < 6) return;
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  S.frame = { x: r.x / sw, y: r.y / sh, w: r.w / sw, h: r.h / sh };
+  commit('frame');
+  if (!store.get('penumbra:frameTip', false)) {
+    store.set('penumbra:frameTip', true);
+    notify('Área do texto fixada. Para voltar ao padrão, escolha uma margem nos ajustes (Aa).');
+  }
+}
 stage.addEventListener('pointermove', (e) => {
   const p = ptrs.get(e.pointerId);
   if (!p || !g) return;
@@ -1903,7 +1992,7 @@ stage.addEventListener('pointermove', (e) => {
     if (ptrs.size < 2) return;
     const [a, b] = [...ptrs.values()];
     g.r = dist(a, b) / g.d0;
-    if (g.text) { pageEl.style.transform = 'scale(' + clamp(g.r, 0.6, 1.8) + ')'; return; }
+    if (g.text) { moveFrame(g, a, b); return; }
     const [cx, cy] = local((a.x + b.x) / 2, (a.y + b.y) / 2);
     engine.zoomTo(g.z0 * g.r, cx, cy);
     return;
@@ -1921,9 +2010,7 @@ function endPointer(e, cancelled) {
     if (!g.committed) {
       g.committed = true;
       if (g.text) {
-        pageEl.style.transform = '';
-        const steps = Math.round(Math.log(g.r) / Math.log(1.15));
-        if (steps) { S.fs = clamp(S.fs + steps, 0, FS.length - 1); commit('fs'); notify('Tamanho do texto: ' + (S.fs + 1) + ' de ' + FS.length); }
+        if (cancelled) { $('guide').hidden = true; pageEl.style.opacity = ''; } else endFrame(g);
       } else engine.commitZoom();
     }
     if (!ptrs.size) g = null;
@@ -1986,6 +2073,8 @@ document.addEventListener('keydown', (e) => {
   if (e.target && e.target.matches && e.target.matches('input')) return;
   if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); turn(1); }
   else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); turn(-1); }
+  else if (engine.kind !== 'pdf' && ['+', '='].includes(e.key)) { e.preventDefault(); bumpFs(1); }
+  else if (engine.kind !== 'pdf' && ['-', '_'].includes(e.key)) { e.preventDefault(); bumpFs(-1); }
 });
 window.addEventListener('resize', schedRelayout);
 document.addEventListener('visibilitychange', () => {
