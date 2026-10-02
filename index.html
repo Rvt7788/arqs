@@ -1280,22 +1280,60 @@ function sampleBook() {
 }
 
 /* ================= motor de texto (EPUB, DOCX, TXT, PDF em modo Texto) ================= */
-// Área do texto escolhida pela pinça. Guardada em frações da tela para valer em qualquer
-// orientação ou tamanho; aqui vira pixels, sempre dentro da tela e com um mínimo legível.
+// Área do texto escolhida pela pinça. Guardada como margens em pixels a partir das bordas da
+// tela (l, t, r, b): se a tela muda um pouco (barra do sistema, tela cheia), as margens ficam
+// iguais e só o miolo se ajusta. Sempre cabe na tela e mantém um mínimo legível.
 const FRAME_MIN = 140;
+function fit1(a, b, size) {
+  a = Math.max(0, a || 0); b = Math.max(0, b || 0);
+  const room = size - Math.min(FRAME_MIN, size);
+  if (a + b > room) { const k = room / (a + b); a *= k; b *= k; }
+  return [a, size - a - b];
+}
 function fitFrame(f, sw, sh) {
-  const w = clamp(f.w * sw, Math.min(FRAME_MIN, sw), sw), h = clamp(f.h * sh, Math.min(FRAME_MIN, sh), sh);
-  return { x: clamp(f.x * sw, 0, sw - w), y: clamp(f.y * sh, 0, sh - h), w, h };
+  // formato antigo (frações da tela) vira margens
+  if (f.w != null) f = { l: f.x * sw, t: f.y * sh, r: sw - (f.x + f.w) * sw, b: sh - (f.y + f.h) * sh };
+  const [x, w] = fit1(f.l, f.r, sw), [y, h] = fit1(f.t, f.b, sh);
+  return { x, y, w, h };
 }
 const T = (() => {
   let book = null, meta = null, cum = [], total = 1, ch = 0, pages = 1, pi = 0, W = 0, H = 0, tok = 0, marks = [];
+  // Âncora de leitura: posição (em caracteres do capítulo) da primeira letra da página atual.
+  // Ao refazer o texto (letra, margens, giro da tela), volta para a página que contém essa letra.
+  let txt = [], txs = [], tlen = 0, cur = null;
+  const rng = document.createRange();
+  function indexText() {
+    txt = []; txs = []; let t = 0;
+    const w = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) { if (!/\S/.test(n.data)) continue; txt.push(n); txs.push(t); t += n.length; }
+    tlen = t; cur = null;
+  }
+  function colOf(i, fx) {
+    let lo = 0, hi = txt.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (txs[m] <= i) lo = m; else hi = m - 1; }
+    const n = txt[lo], k = i - (txs[lo] || 0);
+    if (!n || k < 0 || k >= n.length) return null;
+    rng.setStart(n, k); rng.setEnd(n, k + 1);
+    for (const r of rng.getClientRects()) if (r.width || r.height) return Math.floor((r.left - fx + 2) / (W + GAP));
+    return null;
+  }
+  function colNear(i, fx) { for (let k = i, e = Math.min(tlen, i + 64); k < e; k++) { const c = colOf(k, fx); if (c != null) return c; } return null; }
+  function startOf(p) {
+    if (!tlen) return null;
+    const fx = flow.getBoundingClientRect().left;
+    let lo = 0, hi = tlen;
+    while (lo < hi) { const m = (lo + hi) >> 1, c = colNear(m, fx); if (c == null || c >= p) hi = m; else lo = m + 1; }
+    return lo < tlen && colNear(lo, fx) === p ? lo : null; // página só com imagem: sem âncora
+  }
   const frac = () => (cum[ch] + (pi / pages) * book.chapters[ch].len) / total;
   async function layout(target) {
     const my = ++tok;
+    stageKey = stage.clientWidth + 'x' + stage.clientHeight;
     if (S.frame) {
       const sw = stage.clientWidth, sh = stage.clientHeight;
       if (sw < 80 || sh < 80) return;
       const r = fitFrame(S.frame, sw, sh);
+      if (S.frame.w != null) { S.frame = { l: Math.round(r.x), t: Math.round(r.y), r: Math.round(sw - r.x - r.w), b: Math.round(sh - r.y - r.h) }; store.set('penumbra:settings', S); }
       W = Math.floor(r.w); H = Math.floor(r.h);
       pageEl.style.left = Math.round(r.x) + 'px'; pageEl.style.top = Math.round(r.y) + 'px';
     } else {
@@ -1314,7 +1352,13 @@ const T = (() => {
     // onde começa cada página do PDF original (para sincronizar com o modo Página)
     const fx = flow.getBoundingClientRect().left;
     marks = [...flow.querySelectorAll('[data-pg]')].map((e) => ({ pg: +e.dataset.pg, col: Math.floor((e.getBoundingClientRect().left - fx + 2) / (W + GAP)) }));
-    if (target && typeof target === 'object') {
+    if (target && typeof target === 'object' && target.o != null) {
+      const c = colNear(target.o, fx);
+      pi = clamp(c == null ? 0 : c, 0, pages - 1);
+      // a âncora continua a mesma: vários ajustes seguidos não fazem a leitura escorregar
+      draw(target.o);
+      return;
+    } else if (target && typeof target === 'object') {
       let c = 0; marks.forEach((k) => { if (k.pg <= target.pg) c = k.col; });
       pi = clamp(c, 0, pages - 1);
     } else pi = target === 'last' ? pages - 1 : clamp(Math.floor((+target || 0) * pages + 1e-6), 0, pages - 1);
@@ -1322,13 +1366,16 @@ const T = (() => {
   }
   async function show(i, target) {
     ch = i; flow.innerHTML = book.chapters[i].html; flow.style.transform = 'none';
+    indexText();
     await layout(target);
   }
-  function draw() {
+  function draw(keep) {
     flow.style.transform = 'translate3d(' + (-pi * (W + GAP)) + 'px,0,0)';
+    cur = keep != null ? keep : startOf(pi);
     if (meta) {
       const c = book.chapters[ch];
       meta.pos = { ch, f: pi / pages };
+      if (cur != null) meta.pos.o = cur;
       meta.pct = Math.min(100, Math.round(100 * (cum[ch] + ((pi + 1) / pages) * c.len) / total));
       let pg = c.pg;
       marks.forEach((k) => { if (k.col <= pi) pg = k.pg; });
@@ -1349,7 +1396,7 @@ const T = (() => {
       b.chapters.forEach((c) => { cum.push(t); t += c.len; }); total = Math.max(1, t);
       pageEl.lang = b.lang || 'pt-BR';
       let pos = (m && m.pos) || { ch: 0, f: 0 };
-      let target = pos.f || 0;
+      let target = pos.o != null ? { o: pos.o } : (pos.f || 0);
       if (m && m.sync && m.page) { let i = 0; b.chapters.forEach((c, k) => { if (c.pg && c.pg <= m.page) i = k; }); pos = { ch: i }; target = { pg: m.page }; }
       if (m) delete m.sync;
       await show(clamp(pos.ch | 0, 0, b.chapters.length - 1), target);
@@ -1357,7 +1404,7 @@ const T = (() => {
     close() { tok++; flow.innerHTML = ''; if (book && book.urls) book.urls.forEach((u) => URL.revokeObjectURL(u)); book = null; meta = null; },
     next() { if (pi < pages - 1) { pi++; draw(); } else if (ch < book.chapters.length - 1) show(ch + 1, 0); else notify('Fim do livro.'); },
     prev() { if (pi > 0) { pi--; draw(); } else if (ch > 0) show(ch - 1, 'last'); },
-    relayout() { if (book) layout(pi / pages); },
+    relayout() { if (book) layout(cur != null ? { o: cur } : pi / pages); },
     pannable: () => false, edges: () => ALL_EDGES, pan() {}, zoom: () => 1, zoomTo() {}, commitZoom() {}, toggleZoom() {},
     info() {
       const c = book.chapters[ch], rem = (1 - (pi + 1) / pages) * c.len, min = rem / 1000;
@@ -1964,7 +2011,7 @@ function moveFrame(s, a, b) {
   // o ponto sob os dedos continua sob os dedos enquanto a área cresce ou encolhe
   const w = f.w * rx, h = f.h * ry;
   const x = mx - (s.m0[0] - f.x) * rx, y = my - (s.m0[1] - f.y) * ry;
-  const r = fitFrame({ x: x / sw, y: y / sh, w: w / sw, h: h / sh }, sw, sh);
+  const r = fitFrame({ l: x, t: y, r: sw - x - w, b: sh - y - h }, sw, sh);
   s.box = r;
   const gd = $('guide');
   Object.assign(gd.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
@@ -1977,7 +2024,7 @@ function endFrame(s) {
   // dois dedos que mal se mexeram não viram margem personalizada
   if (Math.abs(r.x - f.x) < 6 && Math.abs(r.y - f.y) < 6 && Math.abs(r.w - f.w) < 6 && Math.abs(r.h - f.h) < 6) return;
   const sw = stage.clientWidth, sh = stage.clientHeight;
-  S.frame = { x: r.x / sw, y: r.y / sh, w: r.w / sw, h: r.h / sh };
+  S.frame = { l: Math.round(r.x), t: Math.round(r.y), r: Math.round(sw - r.x - r.w), b: Math.round(sh - r.y - r.h) };
   commit('frame');
   if (!store.get('penumbra:frameTip', false)) {
     store.set('penumbra:frameTip', true);
@@ -2076,7 +2123,14 @@ document.addEventListener('keydown', (e) => {
   else if (engine.kind !== 'pdf' && ['+', '='].includes(e.key)) { e.preventDefault(); bumpFs(1); }
   else if (engine.kind !== 'pdf' && ['-', '_'].includes(e.key)) { e.preventDefault(); bumpFs(-1); }
 });
-window.addEventListener('resize', schedRelayout);
+// Só refaz o texto se a área de leitura mudou de verdade: o celular dispara "resize"
+// por motivos que não mudam nada (teclado, barra de endereço, tema do sistema).
+let stageKey = '';
+window.addEventListener('resize', () => {
+  const k = stage.clientWidth + 'x' + stage.clientHeight;
+  if (k === stageKey) return;
+  stageKey = k; schedRelayout();
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { lastHidden = Date.now(); flushSave(); }
   else wakeOn();
